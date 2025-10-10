@@ -1,25 +1,31 @@
 // SPDX-License-Identifier: MIT
-// SPDX-FileCopyrightText: 2023 Steadybit GmbH
+// SPDX-FileCopyrightText: 2025 Steadybit GmbH
 
 package config
 
 import (
 	"github.com/kelseyhightower/envconfig"
 	"github.com/rs/zerolog/log"
-	"github.com/steadybit/advice-kit/go/advice_kit_sdk"
 )
 
 // Specification is the configuration specification for the extension. Configuration values can be applied
 // through environment variables. Learn more through the documentation of the envconfig package.
 // https://github.com/kelseyhightower/envconfig
 type Specification struct {
-	// This is just a sample configuration value. You can remove it. To be set, you would set the environment
-	// variable STEADYBIT_EXTENSION_ROBOT_NAMES="R2-D2,C-3PO".
-	RobotNames []string `json:"robotNames" split_words:"true" required:"true" default:"Bender,Terminator,R2-D2"`
-	// variable STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_ROBOT="robot.label.a,robot.tags.*".
-	DiscoveryAttributesExcludesRobot []string `json:"discoveryAttributesExcludesRobot" split_words:"true" required:"false"`
-	// variable STEADYBIT_EXTENSION_ACTIVE_ADVICE_LIST="robot_maintenance". To activate all advice, set the value to "*". To exclude some advice, set the value to e.g. "com.steadybit.extension_scaffold.advice.robot-maintenance".
-	advice_kit_sdk.AdviceConfig
+	Host                                      string   `json:"host" required:"true" split_words:"true"`
+	Username                                  string   `json:"username" required:"false" split_words:"true"`
+	Password                                  string   `json:"password" required:"false" split_words:"true"`
+	UseTLS                                    string   `json:"useTLS" required:"false" split_words:"true"`
+	InsecureSkipVerify                        bool     `json:"insecureSkipVerify" required:"false" split_words:"true"`
+	RabbitClusterCertChainFile                string   `json:"rabbitClusterCertChainFile" required:"false" split_words:"true"`
+	RabbitClusterCertKeyFile                  string   `json:"rabbitClusterCertKeyFile" required:"false" split_words:"true"`
+	RabbitClusterCaFile                       string   `json:"rabbitClusterCaFile" required:"false" split_words:"true"`
+	DiscoveryIntervalConsumerGroup            int      `json:"discoveryIntervalrabbitConsumerGroup" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalrabbitBroker             int      `json:"discoveryIntervalrabbitBroker" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalrabbitTopic              int      `json:"discoveryIntervalrabbitTopic" split_words:"true" required:"false" default:"30"`
+	DiscoveryAttributesExcludesBrokers        []string `json:"discoveryAttributesExcludesBrokers" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesTopics         []string `json:"discoveryAttributesExcludesTopics" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesConsumerGroups []string `json:"discoveryAttributesExcludesConsumerGroups" split_words:"true" required:"false"`
 }
 
 var (

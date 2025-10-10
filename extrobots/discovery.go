@@ -11,7 +11,7 @@ import (
 	"github.com/steadybit/discovery-kit/go/discovery_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
 	"github.com/steadybit/extension-kit/extutil"
-	"github.com/steadybit/extension-scaffold/config"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"time"
 )
 
@@ -100,7 +100,7 @@ func (d *robotDiscovery) DiscoverTargets(_ context.Context) ([]discovery_kit_api
 			Label:      name,
 			Attributes: map[string][]string{
 				"robot.name":              {name},
-				"robot.reportedBy":        {"extension-scaffold"},
+				"robot.reportedBy":        {"extension-rabbitmq"},
 				"robot.tags.firstTag":     {"just a tag"},
 				"robot.needs.maintenance": {needsMaintenance},
 			},
