@@ -12,20 +12,19 @@ import (
 // through environment variables. Learn more through the documentation of the envconfig package.
 // https://github.com/kelseyhightower/envconfig
 type Specification struct {
-	Host                                      string   `json:"host" required:"true" split_words:"true"`
-	Username                                  string   `json:"username" required:"false" split_words:"true"`
-	Password                                  string   `json:"password" required:"false" split_words:"true"`
-	UseTLS                                    string   `json:"useTLS" required:"false" split_words:"true"`
-	InsecureSkipVerify                        bool     `json:"insecureSkipVerify" required:"false" split_words:"true"`
-	RabbitClusterCertChainFile                string   `json:"rabbitClusterCertChainFile" required:"false" split_words:"true"`
-	RabbitClusterCertKeyFile                  string   `json:"rabbitClusterCertKeyFile" required:"false" split_words:"true"`
-	RabbitClusterCaFile                       string   `json:"rabbitClusterCaFile" required:"false" split_words:"true"`
-	DiscoveryIntervalConsumerGroup            int      `json:"discoveryIntervalrabbitConsumerGroup" split_words:"true" required:"false" default:"30"`
-	DiscoveryIntervalrabbitBroker             int      `json:"discoveryIntervalrabbitBroker" split_words:"true" required:"false" default:"30"`
-	DiscoveryIntervalrabbitTopic              int      `json:"discoveryIntervalrabbitTopic" split_words:"true" required:"false" default:"30"`
-	DiscoveryAttributesExcludesBrokers        []string `json:"discoveryAttributesExcludesBrokers" split_words:"true" required:"false"`
-	DiscoveryAttributesExcludesTopics         []string `json:"discoveryAttributesExcludesTopics" split_words:"true" required:"false"`
-	DiscoveryAttributesExcludesConsumerGroups []string `json:"discoveryAttributesExcludesConsumerGroups" split_words:"true" required:"false"`
+	ManagementURL                     string   `json:"managementURL" required:"true" split_words:"true"`
+	Username                          string   `json:"username" required:"false" split_words:"true"`
+	Password                          string   `json:"password" required:"false" split_words:"true"`
+	UseTLS                            string   `json:"useTLS" required:"false" split_words:"true"`
+	InsecureSkipVerify                bool     `json:"insecureSkipVerify" required:"false" split_words:"true"`
+	RabbitClusterCertChainFile        string   `json:"rabbitClusterCertChainFile" required:"false" split_words:"true"`
+	RabbitClusterCertKeyFile          string   `json:"rabbitClusterCertKeyFile" required:"false" split_words:"true"`
+	RabbitClusterCaFile               string   `json:"rabbitClusterCaFile" required:"false" split_words:"true"`
+	DiscoveryIntervalConsumerGroup    int      `json:"discoveryIntervalrabbitConsumerGroup" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalrabbitBroker     int      `json:"discoveryIntervalrabbitBroker" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalrabbitTopic      int      `json:"discoveryIntervalrabbitTopic" split_words:"true" required:"false" default:"30"`
+	DiscoveryAttributesExcludesVhosts []string `json:"discoveryAttributesExcludesVhosts" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesQueues []string `json:"discoveryAttributesExcludesQueues" split_words:"true" required:"false"`
 }
 
 var (

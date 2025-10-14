@@ -1,15 +1,21 @@
-// SPDX-License-Identifier: MIT
-// SPDX-FileCopyrightText: 2023 Steadybit GmbH
+/*
+ * Copyright 2024 steadybit GmbH. All rights reserved.
+ */
 
 package main
 
 import (
-	_ "github.com/KimMachineGun/automemlimit" // By default, it sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	_ "github.com/KimMachineGun/automemlimit" // Sets GOMEMLIMIT to 90% of cgroup limit.
+	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/advice-kit/go/advice_kit_api"
-	"github.com/steadybit/advice-kit/go/advice_kit_sdk"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_sdk"
 	"github.com/steadybit/event-kit/go/event_kit_api"
@@ -20,105 +26,178 @@ import (
 	"github.com/steadybit/extension-kit/extruntime"
 	"github.com/steadybit/extension-kit/extsignals"
 	"github.com/steadybit/extension-rabbitmq/config"
-	"github.com/steadybit/extension-rabbitmq/extadvice/robot_maintenance"
-	"github.com/steadybit/extension-rabbitmq/extevents"
-	"github.com/steadybit/extension-rabbitmq/extpreflight"
-	"github.com/steadybit/extension-rabbitmq/extrobots"
-	"github.com/steadybit/preflight-kit/go/preflight_kit_api"
-	"github.com/steadybit/preflight-kit/go/preflight_kit_sdk"
-	_ "go.uber.org/automaxprocs" // Importing automaxprocs automatically adjusts GOMAXPROCS.
+	"github.com/steadybit/extension-rabbitmq/extrabbitmq"
+	_ "go.uber.org/automaxprocs" // Adjusts GOMAXPROCS.
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 )
 
-func main() {
-	// Most Steadybit extensions leverage zerolog. To encourage persistent logging setups across extensions,
-	// you may leverage the extlogging package to initialize zerolog. Among others, this package supports
-	// configuration of active log levels and the log format (JSON or plain text).
-	//
-	// Example
-	//  - to activate JSON logging, set the environment variable STEADYBIT_LOG_FORMAT="json"
-	//  - to set the log level to debug, set the environment variable STEADYBIT_LOG_LEVEL="debug"
-	extlogging.InitZeroLog()
-
-	// Build information is set at compile-time. This line writes the build information to the log.
-	// The information is mostly handy for debugging purposes.
-	extbuild.PrintBuildInformation()
-	extruntime.LogRuntimeInformation(zerolog.DebugLevel)
-
-	// Most extensions require some form of configuration. These calls exist to parse and validate the
-	// configuration obtained from environment variables.
-	config.ParseConfiguration()
-	config.ValidateConfiguration()
-
-	//This will start /health/liveness and /health/readiness endpoints on port 8081 for use with kubernetes
-	//The port can be configured using the STEADYBIT_EXTENSION_HEALTH_PORT environment variable
-	exthealth.SetReady(false)
-	exthealth.StartProbes(8081)
-
-	// This call registers a handler for the extension's root path. This is the path initially accessed
-	// by the Steadybit agent to obtain the extension's capabilities.
-	exthttp.RegisterHttpHandler("/", exthttp.GetterAsHandler(getExtensionList))
-
-	// This is a section you will most likely want to change: The registration of HTTP handlers
-	// for your extension. You might want to change these because the names do not fit, or because
-	// you do not have a need for all of them.
-	discovery_kit_sdk.Register(extrobots.NewRobotDiscovery())
-	action_kit_sdk.RegisterAction(extrobots.NewLogAction())
-	extevents.RegisterEventListenerHandlers()
-
-	// Register the handler for the advice endpoint
-	advice_kit_sdk.RegisterAdvice(config.Config.AdviceConfig, robot_maintenance.GetAdviceDescriptionRobotMaintenance)
-
-	//This will install a signal handlder, that will stop active actions when receiving a SIGURS1, SIGTERM or SIGINT
-	extsignals.ActivateSignalHandlers()
-
-	//This will register the coverage endpoints for the extension (used by action_kit_test)
-	action_kit_sdk.RegisterCoverageEndpoints()
-
-	preflight_kit_sdk.RegisterPreflight(extpreflight.NewSimplePreflight())
-	preflight_kit_sdk.RegisterPreflight(extpreflight.NewMaintenanceWindowPreflight())
-
-	//This will switch the readiness state of the application to true.
-	exthealth.SetReady(true)
-
-	exthttp.Listen(exthttp.ListenOpts{
-		// This is the default port under which your extension is accessible.
-		// The port can be configured externally through the
-		// STEADYBIT_EXTENSION_PORT environment variable.
-		// We suggest that you keep port 8080 as the default.
-		Port: 8080,
-	})
-}
-
-// ExtensionListResponse exists to merge the possible root path responses supported by the
-// various extension kits. In this case, the response for ActionKit, DiscoveryKit and EventKit.
+// ExtensionListResponse merges ActionKit, DiscoveryKit, EventKit, AdviceKit.
 type ExtensionListResponse struct {
 	action_kit_api.ActionList       `json:",inline"`
 	discovery_kit_api.DiscoveryList `json:",inline"`
 	event_kit_api.EventListenerList `json:",inline"`
 	advice_kit_api.AdviceList       `json:",inline"`
-	preflight_kit_api.PreflightList `json:",inline"`
+}
+
+func main() {
+	extlogging.InitZeroLog()
+	extbuild.PrintBuildInformation()
+	extruntime.LogRuntimeInformation(zerolog.DebugLevel)
+
+	config.ParseConfiguration()
+	config.ValidateConfiguration()
+	testManagementConnection()
+
+	exthealth.SetReady(false)
+	exthealth.StartProbes(8084)
+
+	ctx, cancel := SignalCanceledContext()
+	registerHandlers(ctx)
+
+	extsignals.AddSignalHandler(extsignals.SignalHandler{
+		Handler: func(s os.Signal) { cancel() },
+		Order:   extsignals.OrderStopCustom,
+		Name:    "custom-extension-rabbitmq",
+	})
+	extsignals.ActivateSignalHandlers()
+
+	action_kit_sdk.RegisterCoverageEndpoints()
+	exthealth.SetReady(true)
+
+	exthttp.Listen(exthttp.ListenOpts{Port: 8083})
+}
+
+func registerHandlers(ctx context.Context) {
+	// Discovery
+	discovery_kit_sdk.Register(extrabbitmq.NewRabbitVhostDiscovery(ctx))
+	discovery_kit_sdk.Register(extrabbitmq.NewRabbitNodeDiscovery(ctx))
+
+	// Actions: register here when you add them.
+
+	// Root index
+	exthttp.RegisterHttpHandler("/", exthttp.GetterAsHandler(getExtensionList))
 }
 
 func getExtensionList() ExtensionListResponse {
 	return ExtensionListResponse{
-		// See this document to learn more about the action list:
-		// https://github.com/steadybit/action-kit/blob/main/docs/action-api.md#action-list
-		ActionList: action_kit_sdk.GetActionList(),
-
-		// See this document to learn more about the discovery list:
-		// https://github.com/steadybit/discovery-kit/blob/main/docs/discovery-api.md#index-response
+		ActionList:    action_kit_sdk.GetActionList(),
 		DiscoveryList: discovery_kit_sdk.GetDiscoveryList(),
-
-		// See this document to learn more about the event listener list:
-		// https://github.com/steadybit/event-kit/blob/main/docs/event-api.md#event-listeners-list
-		EventListenerList: extevents.GetEventListenerList(),
-
-		// See this document to learn more about the advice list:
-		// https://github.com/steadybit/advice-kit/blob/main/docs/advice-api.md#index-response
-		AdviceList: advice_kit_sdk.GetAdviceList(),
-
-		// See this document to learn more about the preflight list:
-		// https://github.com/steadybit/preflight-kit/main/docs/preflight-api.md#index-response
-		PreflightList: preflight_kit_sdk.GetPreflightList(),
 	}
+}
+
+func SignalCanceledContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGUSR1)
+	go func() {
+		select {
+		case <-c:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, func() {
+		signal.Stop(c)
+		cancel()
+	}
+}
+
+// --- connectivity check against the management API ---
+
+func testManagementConnection() {
+	endpoints := mgmtEndpointsFromConfig()
+	if len(endpoints) == 0 {
+		log.Warn().Msg("no ManagementURL configured; skipping connectivity check")
+		return
+	}
+
+	okAny := false
+	for _, e := range endpoints {
+		cl, err := newMgmtClient(e, config.Config.Username, config.Config.Password)
+		if err != nil {
+			log.Error().Err(err).Str("endpoint", e).Msg("failed to init management client")
+			continue
+		}
+		if _, err := cl.Overview(); err != nil {
+			log.Error().Err(err).Str("endpoint", e).Msg("management API ping failed")
+			continue
+		}
+		log.Info().Str("endpoint", e).Msg("management API reachable")
+		okAny = true
+	}
+	if !okAny {
+		log.Fatal().Msg("no reachable RabbitMQ management endpoint")
+	}
+}
+
+func mgmtEndpointsFromConfig() []string {
+	// Prefer comma-separated list; fall back to single; else empty.
+	raw := strings.TrimSpace(config.Config.ManagementURL)
+	if raw == "" {
+		raw = strings.TrimSpace(config.Config.ManagementURL)
+	}
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func newMgmtClient(endpoint, user, pass string) (*rabbithole.Client, error) {
+	// Accept endpoints without scheme as http
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		endpoint = "http://" + endpoint
+	}
+
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	// Username/password from URL take precedence if present
+	if u.User != nil {
+		if ui := u.User.Username(); ui != "" {
+			user = ui
+		}
+		if pw, ok := u.User.Password(); ok {
+			pass = pw
+		}
+	}
+
+	// HTTP or default HTTPS without custom TLS -> simple client
+	if u.Scheme == "http" || (!config.Config.InsecureSkipVerify && config.Config.RabbitClusterCertChainFile == "") {
+		return rabbithole.NewClient(u.String(), user, pass)
+	}
+
+	// HTTPS with custom TLS options
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	if config.Config.InsecureSkipVerify {
+		tlsCfg.InsecureSkipVerify = true
+	}
+	if caPath := strings.TrimSpace(config.Config.RabbitClusterCertChainFile); caPath != "" {
+		pem, readErr := os.ReadFile(caPath)
+		if readErr != nil {
+			return nil, readErr
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("failed to parse CA bundle: %s", caPath)
+		}
+		tlsCfg.RootCAs = pool
+	}
+
+	tr := &http.Transport{TLSClientConfig: tlsCfg}
+	return rabbithole.NewTLSClient(u.String(), user, pass, tr)
 }
