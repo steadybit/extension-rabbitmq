@@ -42,7 +42,7 @@ func TestGetAllNodes_SingleEndpoint(t *testing.T) {
 	srv := fakeMgmtNodesServer(t, []nodeResp{{Name: "rabbit@node-0", Type: "disc", Running: true}})
 	defer srv.Close()
 
-	config.Config.ManagementURL = srv.URL
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{{URL: srv.URL}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -62,7 +62,6 @@ func TestGetAllNodes_SingleEndpoint(t *testing.T) {
 	assertAttr(t, got, "rabbitmq.node.name", "rabbit@node-0")
 	assertAttr(t, got, "rabbitmq.node.type", "disc")
 	assertAttr(t, got, "rabbitmq.node.running", "true")
-	assertAttr(t, got, "rabbitmq.mgmt.url", srv.URL)
 }
 
 func TestGetAllNodes_MultipleEndpoints(t *testing.T) {
@@ -73,7 +72,7 @@ func TestGetAllNodes_MultipleEndpoints(t *testing.T) {
 	s2 := fakeMgmtNodesServer(t, []nodeResp{{Name: "rabbit@b", Type: "ram", Running: false}})
 	defer s2.Close()
 
-	config.Config.ManagementURL = s1.URL + "," + s2.URL
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{{URL: s1.URL}, {URL: s2.URL}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -1,18 +1,17 @@
-// common_test.go
 package extrabbitmq
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/pem"
+	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/extension-rabbitmq/config"
 )
 
@@ -27,13 +26,11 @@ func fakeMgmtServer(t *testing.T, requireAuth bool) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/overview", func(w http.ResponseWriter, r *http.Request) {
 		if requireAuth {
-			h := r.Header.Get("Authorization")
-			if h == "" {
+			if r.Header.Get("Authorization") == "" {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 		}
-		// minimal valid JSON for Overview()
 		io.WriteString(w, `{}`)
 	})
 	return httptest.NewServer(mux)
@@ -44,63 +41,53 @@ func fakeMgmtTLSServer(t *testing.T, requireAuth bool) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/overview", func(w http.ResponseWriter, r *http.Request) {
 		if requireAuth {
-			h := r.Header.Get("Authorization")
-			if h == "" {
+			if r.Header.Get("Authorization") == "" {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 		}
 		io.WriteString(w, `{}`)
 	})
-	s := httptest.NewTLSServer(mux)
-	return s
+	return httptest.NewTLSServer(mux)
 }
 
-func withTimeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 5*time.Second)
-}
-
-// reset config between tests
 func resetConfig() func() {
 	old := config.Config
 	return func() { config.Config = old }
+}
+
+func writePEM(path string, block *pem.Block) error {
+	return os.WriteFile(path, pem.EncodeToMemory(block), 0o600)
 }
 
 // --- tests ---
 
 func TestCreateNewClient_HTTP_NoAuth_DefaultScheme(t *testing.T) {
 	defer resetConfig()()
-	config.Config.Username = ""
-	config.Config.Password = ""
 
 	s := fakeMgmtServer(t, false)
 	defer s.Close()
 
-	// strip scheme to verify we default to http://
+	// Pass host without scheme to verify defaulting to http://
 	host := strings.TrimPrefix(s.URL, "http://")
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: s.URL}})
 
-	c, err := createNewClient(host)
+	c, err := createNewClient(host, false, "")
 	if err != nil {
 		t.Fatalf("createNewClient error: %v", err)
 	}
-
-	// call a real API method to verify connectivity
-	_, err = c.Overview()
-	if err != nil {
+	if _, err := c.Overview(); err != nil {
 		t.Fatalf("Overview failed: %v", err)
 	}
 }
 
-func TestCreateNewClient_HTTP_BasicAuth_FromConfig(t *testing.T) {
+func TestCreateNewClient_HTTP_BasicAuth_FromEndpoint(t *testing.T) {
 	defer resetConfig()()
-	config.Config.Username = "u"
-	config.Config.Password = "p"
 
-	// require any Authorization header
 	s := fakeMgmtServer(t, true)
 	defer s.Close()
 
-	// add a check that header is present and matches
+	// Ensure the exact auth header is sent
 	orig := s.Config.Handler
 	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/overview" {
@@ -112,7 +99,9 @@ func TestCreateNewClient_HTTP_BasicAuth_FromConfig(t *testing.T) {
 		orig.ServeHTTP(w, r)
 	})
 
-	c, err := createNewClient(s.URL)
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: s.URL, Username: "u", Password: "p"}})
+
+	c, err := createNewClient(s.URL, false, "")
 	if err != nil {
 		t.Fatalf("createNewClient error: %v", err)
 	}
@@ -123,13 +112,11 @@ func TestCreateNewClient_HTTP_BasicAuth_FromConfig(t *testing.T) {
 
 func TestCreateNewClient_HTTP_BasicAuth_FromURL(t *testing.T) {
 	defer resetConfig()()
-	config.Config.Username = ""
-	config.Config.Password = ""
+	setEndpointsJSON(nil)
 
 	s := fakeMgmtServer(t, true)
 	defer s.Close()
 
-	// inject our own handler to validate the exact basic header for url creds
 	orig := s.Config.Handler
 	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/overview" {
@@ -141,10 +128,9 @@ func TestCreateNewClient_HTTP_BasicAuth_FromURL(t *testing.T) {
 		orig.ServeHTTP(w, r)
 	})
 
-	// put creds into the URL
 	urlWithCreds := strings.Replace(s.URL, "http://", "http://urluser:urlpass@", 1)
 
-	c, err := createNewClient(urlWithCreds)
+	c, err := createNewClient(urlWithCreds, false, "")
 	if err != nil {
 		t.Fatalf("createNewClient error: %v", err)
 	}
@@ -155,13 +141,13 @@ func TestCreateNewClient_HTTP_BasicAuth_FromURL(t *testing.T) {
 
 func TestCreateNewClient_HTTPS_InsecureSkipVerify(t *testing.T) {
 	defer resetConfig()()
-	config.Config.InsecureSkipVerify = true
-	config.Config.RabbitClusterCertChainFile = ""
 
 	s := fakeMgmtTLSServer(t, false)
 	defer s.Close()
 
-	c, err := createNewClient(s.URL)
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: s.URL, InsecureSkipVerify: true}})
+
+	c, err := createNewClient(s.URL, true, "")
 	if err != nil {
 		t.Fatalf("createNewClient error: %v", err)
 	}
@@ -172,24 +158,21 @@ func TestCreateNewClient_HTTPS_InsecureSkipVerify(t *testing.T) {
 
 func TestCreateNewClient_HTTPS_CustomCA(t *testing.T) {
 	defer resetConfig()()
-	config.Config.InsecureSkipVerify = false
 
 	s := fakeMgmtTLSServer(t, false)
 	defer s.Close()
 
-	// write server cert to a temp PEM file and point the config at it
 	tmp := t.TempDir()
 	pemPath := tmp + "/ca.pem"
 
-	// extract leaf cert from httptest server and write as PEM
 	certDER := s.TLS.Certificates[0].Certificate[0]
-	block := &pem.Block{Type: "CERTIFICATE", Bytes: certDER}
-	if err := writePEM(pemPath, block); err != nil {
+	if err := writePEM(pemPath, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
 		t.Fatalf("writePEM: %v", err)
 	}
-	config.Config.RabbitClusterCertChainFile = pemPath
 
-	c, err := createNewClient(s.URL)
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: s.URL, CAFile: pemPath}})
+
+	c, err := createNewClient(s.URL, false, pemPath)
 	if err != nil {
 		t.Fatalf("createNewClient error: %v", err)
 	}
@@ -198,12 +181,47 @@ func TestCreateNewClient_HTTPS_CustomCA(t *testing.T) {
 	}
 }
 
-// --- tiny util to write a PEM file ---
-func writePEM(path string, block *pem.Block) error {
-	return osWriteFile(path, pem.EncodeToMemory(block))
-}
+func TestFetchTargetPerClient_AggregatesFromAllEndpoints(t *testing.T) {
+	defer resetConfig()()
 
-// indirection to keep imports minimal in tests
-var osWriteFile = func(name string, data []byte) error {
-	return os.WriteFile(name, data, 0o600)
+	s1 := fakeMgmtServer(t, false)
+	defer s1.Close()
+	s2 := fakeMgmtServer(t, false)
+	defer s2.Close()
+
+	setEndpointsJSON([]config.ManagementEndpoint{
+		{URL: s1.URL},
+		{URL: s2.URL},
+	})
+
+	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+		// Sanity check connectivity
+		if _, err := client.Overview(); err != nil {
+			return nil, err
+		}
+		// Return one target per endpoint using the client endpoint as label
+		return []discovery_kit_api.Target{{
+			Id:         client.Endpoint + "::probe",
+			Label:      client.Endpoint,
+			TargetType: "test",
+			Attributes: map[string][]string{"rabbitmq.mgmt.url": {client.Endpoint}},
+		}}, nil
+	}
+
+	targets, err := FetchTargetPerClient(handler)
+	if err != nil {
+		t.Fatalf("FetchTargetPerClient error: %v", err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("expected 2 targets, got %d", len(targets))
+	}
+
+	// Validate both endpoints are present
+	m := map[string]bool{}
+	for _, tgt := range targets {
+		m[tgt.Label] = true
+	}
+	if !m[s1.URL] || !m[s2.URL] {
+		t.Fatalf("expected targets for %q and %q, got labels: %+v", s1.URL, s2.URL, m)
+	}
 }

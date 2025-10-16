@@ -6,7 +6,6 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -17,11 +16,10 @@ import (
 	"github.com/steadybit/extension-kit/extutil"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
-	"github.com/steadybit/extension-rabbitmq/config"
 )
 
 const (
-	nodeTargetId   = "com.steadybit.extension_rabbitmq.rabbitmq-node"
+	nodeTargetId   = "com.steadybit.extension_rabbitmq.node"
 	nodeIcon       = ""
 	nodeRefreshSec = 60
 )
@@ -59,7 +57,6 @@ func (r *rabbitNodeDiscovery) DescribeTarget() discovery_kit_api.TargetDescripti
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},
-				{Attribute: "rabbitmq.mgmt.url"},
 				{Attribute: "rabbitmq.node.name"},
 				{Attribute: "rabbitmq.node.type"},
 				{Attribute: "rabbitmq.node.running"},
@@ -74,7 +71,6 @@ func (r *rabbitNodeDiscovery) DescribeAttributes() []discovery_kit_api.Attribute
 		{Attribute: "rabbitmq.node.name", Label: discovery_kit_api.PluralLabel{One: "Node name", Other: "Node names"}},
 		{Attribute: "rabbitmq.node.type", Label: discovery_kit_api.PluralLabel{One: "Node type", Other: "Node types"}},
 		{Attribute: "rabbitmq.node.running", Label: discovery_kit_api.PluralLabel{One: "Running state", Other: "Running states"}},
-		{Attribute: "rabbitmq.mgmt.url", Label: discovery_kit_api.PluralLabel{One: "Management URL", Other: "Management URLs"}},
 	}
 }
 
@@ -85,47 +81,24 @@ func (r *rabbitNodeDiscovery) DiscoverTargets(ctx context.Context) ([]discovery_
 // --- core listing ---
 
 func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
-	result := make([]discovery_kit_api.Target, 0, 16)
-
-	endpoints := strings.Split(strings.TrimSpace(config.Config.ManagementURL), ",")
-	if len(endpoints) == 0 || (len(endpoints) == 1 && endpoints[0] == "") {
-		if config.Config.ManagementURL != "" {
-			endpoints = []string{config.Config.ManagementURL}
-		} else {
-			endpoints = []string{"http://localhost:15672"}
-		}
-	}
-
-	seen := make(map[string]struct{})
-	for _, raw := range endpoints {
-		host := strings.TrimSpace(raw)
-		if host == "" {
-			continue
-		}
-
-		client, err := createNewClient(host)
-		if err != nil {
-			log.Warn().Err(err).Str("host", host).Msg("failed to initialize rabbitmq management client")
-			continue
-		}
+	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+		out := make([]discovery_kit_api.Target, 0, 16)
 
 		nodes, err := client.ListNodes()
 		if err != nil {
-			log.Warn().Err(err).Str("host", host).Msg("failed to list nodes")
-			continue
+			return nil, err
 		}
-
 		for _, n := range nodes {
-			id := host + "::" + n.Name
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			result = append(result, toNodeTarget(host, n))
+			out = append(out, toNodeTarget(client.Endpoint, n))
 		}
+		return out, nil
 	}
 
-	return discovery_kit_commons.ApplyAttributeExcludes(result, nil), nil
+	targets, err := FetchTargetPerClient(handler)
+	if err != nil {
+		log.Warn().Err(err).Msg("node discovery encountered errors")
+	}
+	return discovery_kit_commons.ApplyAttributeExcludes(targets, nil), nil
 }
 
 func toNodeTarget(mgmtURL string, n rabbithole.NodeInfo) discovery_kit_api.Target {
@@ -133,7 +106,6 @@ func toNodeTarget(mgmtURL string, n rabbithole.NodeInfo) discovery_kit_api.Targe
 		"rabbitmq.node.name":    {n.Name},
 		"rabbitmq.node.type":    {n.NodeType},
 		"rabbitmq.node.running": {fmt.Sprintf("%t", n.IsRunning)},
-		"rabbitmq.mgmt.url":     {mgmtURL},
 	}
 
 	return discovery_kit_api.Target{

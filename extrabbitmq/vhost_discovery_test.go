@@ -41,9 +41,7 @@ func TestGetAllVhosts_SingleEndpoint(t *testing.T) {
 	srv := fakeMgmtVhostServer(t, []vhost{{Name: "/", Tracing: false}, {Name: "dev", Tracing: true}})
 	defer srv.Close()
 
-	config.Config.ManagementURL = srv.URL
-	config.Config.Username = ""
-	config.Config.Password = ""
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: srv.URL}})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -62,10 +60,9 @@ func TestGetAllVhosts_SingleEndpoint(t *testing.T) {
 	}
 	assertAttr(t, *got, "rabbitmq.vhost.name", "dev")
 	assertAttr(t, *got, "rabbitmq.vhost.tracing", "true")
-	assertAttr(t, *got, "rabbitmq.mgmt.url", srv.URL)
 }
 
-func TestGetAllVhosts_CommaSeparatedEndpoints(t *testing.T) {
+func TestGetAllVhosts_MultipleEndpoints(t *testing.T) {
 	defer resetCfg()()
 
 	s1 := fakeMgmtVhostServer(t, []vhost{{Name: "alpha", Tracing: false}})
@@ -73,7 +70,7 @@ func TestGetAllVhosts_CommaSeparatedEndpoints(t *testing.T) {
 	s2 := fakeMgmtVhostServer(t, []vhost{{Name: "beta", Tracing: true}})
 	defer s2.Close()
 
-	config.Config.ManagementURL = s1.URL + "," + s2.URL
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: s1.URL}, {URL: s2.URL}})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -83,7 +80,7 @@ func TestGetAllVhosts_CommaSeparatedEndpoints(t *testing.T) {
 		t.Fatalf("getAllVhosts error: %v", err)
 	}
 	if len(targets) != 2 {
-		t.Fatalf("expected 2 targets from two endpoints, got %d", len(targets))
+		t.Fatalf("expected 2 targets, got %d", len(targets))
 	}
 
 	if findTargetByLabel(targets, "alpha") == nil || findTargetByLabel(targets, "beta") == nil {
@@ -97,7 +94,7 @@ func TestGetAllVhosts_AttributeExcludes(t *testing.T) {
 	srv := fakeMgmtVhostServer(t, []vhost{{Name: "x", Tracing: true}})
 	defer srv.Close()
 
-	config.Config.ManagementURL = srv.URL
+	setEndpointsJSON([]config.ManagementEndpoint{{URL: srv.URL}})
 	config.Config.DiscoveryAttributesExcludesVhosts = []string{"rabbitmq.vhost.tracing"}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

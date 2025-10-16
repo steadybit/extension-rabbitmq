@@ -1,12 +1,8 @@
-// SPDX-License-Identifier: MIT
-// SPDX-FileCopyrightText: 2025 Steadybit GmbH
-
 package extrabbitmq
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -21,7 +17,7 @@ import (
 )
 
 const (
-	queueTargetId   = "com.steadybit.extension_rabbitmq.rabbitmq-queue"
+	queueTargetId   = "com.steadybit.extension_rabbitmq.queue"
 	queueIcon       = ""
 	queueRefreshSec = 60
 )
@@ -59,7 +55,6 @@ func (r *rabbitQueueDiscovery) DescribeTarget() discovery_kit_api.TargetDescript
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},
-				{Attribute: "rabbitmq.mgmt.url"},
 				{Attribute: "rabbitmq.queue.vhost"},
 				{Attribute: "rabbitmq.queue.name"},
 				{Attribute: "rabbitmq.queue.status"},
@@ -75,10 +70,9 @@ func (r *rabbitQueueDiscovery) DescribeAttributes() []discovery_kit_api.Attribut
 	return []discovery_kit_api.AttributeDescription{
 		{Attribute: "rabbitmq.queue.vhost", Label: discovery_kit_api.PluralLabel{One: "Vhost", Other: "Vhosts"}},
 		{Attribute: "rabbitmq.queue.name", Label: discovery_kit_api.PluralLabel{One: "Queue name", Other: "Queue names"}},
-		{Attribute: "rabbitmq.queue.state", Label: discovery_kit_api.PluralLabel{One: "Status", Other: "Status"}},
+		{Attribute: "rabbitmq.queue.status", Label: discovery_kit_api.PluralLabel{One: "Status", Other: "Status"}},
 		{Attribute: "rabbitmq.queue.durable", Label: discovery_kit_api.PluralLabel{One: "Durable", Other: "Durable"}},
 		{Attribute: "rabbitmq.queue.auto_delete", Label: discovery_kit_api.PluralLabel{One: "Auto-delete", Other: "Auto-delete"}},
-		{Attribute: "rabbitmq.mgmt.url", Label: discovery_kit_api.PluralLabel{One: "Management URL", Other: "Management URLs"}},
 	}
 }
 
@@ -89,50 +83,25 @@ func (r *rabbitQueueDiscovery) DiscoverTargets(ctx context.Context) ([]discovery
 // --- core listing ---
 
 func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
-	result := make([]discovery_kit_api.Target, 0, 64)
-
-	// endpoints from config: prefer comma-separated list (ManagementURLs), then single (ManagementURL), else localhost
-	raw := strings.TrimSpace(config.Config.ManagementURL)
-	if raw == "" {
-		raw = strings.TrimSpace(config.Config.ManagementURL)
-	}
-	endpoints := []string{"http://localhost:15672"}
-	if raw != "" {
-		parts := strings.Split(raw, ",")
-		endpoints = make([]string, 0, len(parts))
-		for _, p := range parts {
-			if s := strings.TrimSpace(p); s != "" {
-				endpoints = append(endpoints, s)
-			}
-		}
-	}
-
-	seen := make(map[string]struct{})
-	for _, host := range endpoints {
-		client, err := createNewClient(host)
-		if err != nil {
-			log.Warn().Err(err).Str("host", host).Msg("failed to initialize rabbitmq management client")
-			continue
-		}
+	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+		out := make([]discovery_kit_api.Target, 0, 32)
 
 		qs, err := client.ListQueues()
 		if err != nil {
-			log.Warn().Err(err).Str("host", host).Msg("failed to list queues")
-			continue
+			return nil, err
 		}
-
 		for _, q := range qs {
-			id := host + "::" + q.Vhost + "/" + q.Name
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			result = append(result, toQueueTarget(host, q))
+			out = append(out, toQueueTarget(client.Endpoint, q))
 		}
+		return out, nil
 	}
 
-	// optional exclude list: DiscoveryAttributesExcludesQueues
-	return discovery_kit_commons.ApplyAttributeExcludes(result, config.Config.DiscoveryAttributesExcludesQueues), nil
+	targets, err := FetchTargetPerClient(handler)
+	if err != nil {
+		// FetchTargetPerClient already logs per-endpoint errors; only return fatal errors
+		log.Warn().Err(err).Msg("queue discovery encountered errors")
+	}
+	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesQueues), nil
 }
 
 func toQueueTarget(mgmtURL string, q rabbithole.QueueInfo) discovery_kit_api.Target {
@@ -147,7 +116,6 @@ func toQueueTarget(mgmtURL string, q rabbithole.QueueInfo) discovery_kit_api.Tar
 		"rabbitmq.queue.messages_unacknowledged": {fmt.Sprintf("%d", q.MessagesUnacknowledged)},
 		"rabbitmq.queue.durable":                 {fmt.Sprintf("%t", q.Durable)},
 		"rabbitmq.queue.auto_delete":             {fmt.Sprintf("%t", q.AutoDelete)},
-		"rabbitmq.mgmt.url":                      {mgmtURL},
 	}
 
 	return discovery_kit_api.Target{

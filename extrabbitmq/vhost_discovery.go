@@ -6,7 +6,6 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -22,7 +21,7 @@ import (
 
 // Target type and icon
 const (
-	vhostTargetId = "com.steadybit.extension_rabbitmq.rabbitmq-vhost"
+	vhostTargetId = "com.steadybit.extension_rabbitmq.vhost"
 	rabbitIcon    = ""
 )
 
@@ -62,7 +61,6 @@ func (r *rabbitVhostDiscovery) DescribeTarget() discovery_kit_api.TargetDescript
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},
-				{Attribute: "rabbitmq.mgmt.url"},
 				{Attribute: "rabbitmq.vhost.name"},
 				{Attribute: "rabbitmq.vhost.tracing"},
 			},
@@ -75,7 +73,6 @@ func (r *rabbitVhostDiscovery) DescribeAttributes() []discovery_kit_api.Attribut
 	return []discovery_kit_api.AttributeDescription{
 		{Attribute: "rabbitmq.vhost.name", Label: discovery_kit_api.PluralLabel{One: "Vhost name", Other: "Vhost names"}},
 		{Attribute: "rabbitmq.vhost.tracing", Label: discovery_kit_api.PluralLabel{One: "Vhost tracing", Other: "Vhost tracing"}},
-		{Attribute: "rabbitmq.mgmt.url", Label: discovery_kit_api.PluralLabel{One: "Management URL", Other: "Management URLs"}},
 	}
 }
 
@@ -86,56 +83,30 @@ func (r *rabbitVhostDiscovery) DiscoverTargets(ctx context.Context) ([]discovery
 // --- core listing ---
 
 func getAllVhosts(ctx context.Context) ([]discovery_kit_api.Target, error) {
-	result := make([]discovery_kit_api.Target, 0, 16)
-
-	// Determine management endpoints. Prefer a comma-separated list in config, else a single URL, else localhost.
-	endpoints := strings.Split(strings.TrimSpace(config.Config.ManagementURL), ",")
-	if len(endpoints) == 0 || (len(endpoints) == 1 && endpoints[0] == "") {
-		if config.Config.ManagementURL != "" {
-			endpoints = []string{config.Config.ManagementURL}
-		} else {
-			endpoints = []string{"http://localhost:15672"}
-		}
-	}
-
-	seen := make(map[string]struct{})
-	for _, raw := range endpoints {
-		host := strings.TrimSpace(raw)
-		if host == "" {
-			continue
-		}
-
-		client, err := createNewClient(host)
-		if err != nil {
-			log.Warn().Err(err).Str("host", host).Msg("failed to initialize rabbitmq management client")
-			continue
-		}
+	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+		out := make([]discovery_kit_api.Target, 0, 16)
 
 		vhosts, err := client.ListVhosts()
 		if err != nil {
-			log.Warn().Err(err).Str("host", host).Msg("failed to list vhosts")
-			continue
+			return nil, err
 		}
-
 		for _, vh := range vhosts {
-			id := host + "::" + vh.Name
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-
-			result = append(result, toVhostTarget(host, vh))
+			out = append(out, toVhostTarget(client.Endpoint, vh))
 		}
+		return out, nil
 	}
 
-	return discovery_kit_commons.ApplyAttributeExcludes(result, config.Config.DiscoveryAttributesExcludesVhosts), nil
+	targets, err := FetchTargetPerClient(handler)
+	if err != nil {
+		log.Warn().Err(err).Msg("vhost discovery encountered errors")
+	}
+	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesVhosts), nil
 }
 
 func toVhostTarget(mgmtURL string, vh rabbithole.VhostInfo) discovery_kit_api.Target {
 	attrs := map[string][]string{
 		"rabbitmq.vhost.name":    {vh.Name},
 		"rabbitmq.vhost.tracing": {fmt.Sprintf("%t", vh.Tracing)},
-		"rabbitmq.mgmt.url":      {mgmtURL},
 	}
 
 	return discovery_kit_api.Target{

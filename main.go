@@ -32,7 +32,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 )
 
@@ -76,6 +75,7 @@ func registerHandlers(ctx context.Context) {
 	// Discovery
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitVhostDiscovery(ctx))
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitNodeDiscovery(ctx))
+	discovery_kit_sdk.Register(extrabbitmq.NewRabbitQueueDiscovery(ctx))
 
 	// Actions: register here when you add them.
 
@@ -110,24 +110,24 @@ func SignalCanceledContext() (context.Context, context.CancelFunc) {
 // --- connectivity check against the management API ---
 
 func testManagementConnection() {
-	endpoints := mgmtEndpointsFromConfig()
+	endpoints := config.Config.ManagementEndpoints
 	if len(endpoints) == 0 {
-		log.Warn().Msg("no ManagementURL configured; skipping connectivity check")
+		log.Warn().Msg("no management endpoints configured; skipping connectivity check")
 		return
 	}
 
 	okAny := false
-	for _, e := range endpoints {
-		cl, err := newMgmtClient(e, config.Config.Username, config.Config.Password)
+	for _, ep := range endpoints {
+		cl, err := newMgmtClient(ep)
 		if err != nil {
-			log.Error().Err(err).Str("endpoint", e).Msg("failed to init management client")
+			log.Error().Err(err).Str("endpoint", ep.URL).Msg("failed to init management client")
 			continue
 		}
 		if _, err := cl.Overview(); err != nil {
-			log.Error().Err(err).Str("endpoint", e).Msg("management API ping failed")
+			log.Error().Err(err).Str("endpoint", ep.URL).Msg("management API ping failed")
 			continue
 		}
-		log.Info().Str("endpoint", e).Msg("management API reachable")
+		log.Info().Str("endpoint", ep.URL).Msg("management API reachable")
 		okAny = true
 	}
 	if !okAny {
@@ -135,58 +135,39 @@ func testManagementConnection() {
 	}
 }
 
-func mgmtEndpointsFromConfig() []string {
-	// Prefer comma-separated list; fall back to single; else empty.
-	raw := strings.TrimSpace(config.Config.ManagementURL)
-	if raw == "" {
-		raw = strings.TrimSpace(config.Config.ManagementURL)
-	}
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		s := strings.TrimSpace(p)
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-func newMgmtClient(endpoint, user, pass string) (*rabbithole.Client, error) {
-	// Accept endpoints without scheme as http
-	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-		endpoint = "http://" + endpoint
+func newMgmtClient(ep config.ManagementEndpoint) (*rabbithole.Client, error) {
+	if ep.URL == "" {
+		return nil, fmt.Errorf("endpoint URL is empty")
 	}
 
-	u, err := url.Parse(endpoint)
+	u, err := url.Parse(ep.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	// Username/password from URL take precedence if present
-	if u.User != nil {
-		if ui := u.User.Username(); ui != "" {
+	// Credentials: endpoint fields take precedence; fall back to URL userinfo if present
+	user := ep.Username
+	pass := ep.Password
+	if (user == "" || pass == "") && u.User != nil {
+		if ui := u.User.Username(); ui != "" && user == "" {
 			user = ui
 		}
-		if pw, ok := u.User.Password(); ok {
+		if pw, ok := u.User.Password(); ok && pass == "" {
 			pass = pw
 		}
 	}
 
-	// HTTP or default HTTPS without custom TLS -> simple client
-	if u.Scheme == "http" || (!config.Config.InsecureSkipVerify && config.Config.RabbitClusterCertChainFile == "") {
+	// Plain HTTP or HTTPS without custom TLS
+	if u.Scheme == "http" || (!ep.InsecureSkipVerify && ep.CAFile == "") {
 		return rabbithole.NewClient(u.String(), user, pass)
 	}
 
-	// HTTPS with custom TLS options
+	// HTTPS with TLS options
 	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
-	if config.Config.InsecureSkipVerify {
+	if ep.InsecureSkipVerify {
 		tlsCfg.InsecureSkipVerify = true
 	}
-	if caPath := strings.TrimSpace(config.Config.RabbitClusterCertChainFile); caPath != "" {
+	if caPath := ep.CAFile; caPath != "" {
 		pem, readErr := os.ReadFile(caPath)
 		if readErr != nil {
 			return nil, readErr
