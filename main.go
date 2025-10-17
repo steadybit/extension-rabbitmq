@@ -78,8 +78,11 @@ func registerHandlers(ctx context.Context) {
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitQueueDiscovery(ctx))
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitExchangeDiscovery(ctx))
 
-	// Actions:
+	// Actions
 	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitFixedAmount())
+
+	// Checks
+	action_kit_sdk.RegisterAction(extrabbitmq.NewQueueBacklogCheckAction())
 
 	// Root index
 	exthttp.RegisterHttpHandler("/", exthttp.GetterAsHandler(getExtensionList))

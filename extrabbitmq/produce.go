@@ -54,9 +54,9 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMess
 
 	// AMQP Config
 	amqpAttr := extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.amqp.url")[0]
-	configAmqp, found := config.GetEndpointByAMQPURL(amqpAttr)
-	if !found {
-		return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", amqpAttr)
+	configAmqp, err := config.GetEndpointByAMQPURL(amqpAttr)
+	if err != nil {
+		return nil, err
 	}
 
 	// determine vhost from target attributes

@@ -5,6 +5,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/rs/zerolog/log"
 	"net/url"
@@ -151,15 +152,15 @@ func ValidateConfiguration() {
 
 // GetEndpointByAMQPURL returns the management endpoint configuration matching the provided AMQP URL.
 // It compares against the AMQP.URL field of each configured ManagementEndpoint.
-func GetEndpointByAMQPURL(amqpURL string) (*ManagementEndpoint, bool) {
+func GetEndpointByAMQPURL(amqpURL string) (*ManagementEndpoint, error) {
 	if strings.TrimSpace(amqpURL) == "" {
-		return nil, false
+		return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", amqpURL)
 	}
 	for i := range Config.ManagementEndpoints {
 		ep := &Config.ManagementEndpoints[i]
 		if ep.AMQP != nil && ep.AMQP.URL == amqpURL {
-			return ep, true
+			return ep, nil
 		}
 	}
-	return nil, false
+	return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", amqpURL)
 }
