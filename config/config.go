@@ -11,15 +11,25 @@ import (
 	"strings"
 )
 
-// Specification is the configuration specification for the extension. Configuration values can be applied
-// through environment variables. Learn more through the documentation of the envconfig package.
-// https://github.com/kelseyhightower/envconfig
-type ManagementEndpoint struct {
-	URL                string `json:"url"`
+type AMQPOptions struct {
+	URL                string `json:"url,omitempty"`
+	Vhost              string `json:"vhost,omitempty"`
 	Username           string `json:"username,omitempty"`
 	Password           string `json:"password,omitempty"`
 	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"`
 	CAFile             string `json:"caFile,omitempty"`
+}
+
+// Specification is the configuration specification for the extension. Configuration values can be applied
+// through environment variables. Learn more through the documentation of the envconfig package.
+// https://github.com/kelseyhightower/envconfig
+type ManagementEndpoint struct {
+	URL                string       `json:"url"`
+	Username           string       `json:"username,omitempty"`
+	Password           string       `json:"password,omitempty"`
+	InsecureSkipVerify bool         `json:"insecureSkipVerify,omitempty"`
+	CAFile             string       `json:"caFile,omitempty"`
+	AMQP               *AMQPOptions `json:"amqp,omitempty"`
 }
 
 type Specification struct {
@@ -68,21 +78,67 @@ func ParseConfiguration() {
 		if err != nil {
 			log.Fatal().Err(err).Str("url", ep.URL).Msg("Invalid management endpoint URL")
 		}
-		if u.User != nil {
-			if name := u.User.Username(); name != "" {
-				ep.Username = name
-			}
-			if pw, ok := u.User.Password(); ok {
-				ep.Password = pw
-			}
-			u.User = nil
-			ep.URL = u.String()
+		if strings.TrimSpace(ep.URL) == "" {
+			log.Fatal().Msg("management endpoint 'url' is required in each object")
 		}
-		if ep.CAFile == "" && Config.RabbitClusterCertChainFile != "" {
+		isHTTPS := u.Scheme == "https"
+		if ep.CAFile == "" && isHTTPS && Config.RabbitClusterCertChainFile != "" {
 			ep.CAFile = Config.RabbitClusterCertChainFile
 		}
-		if !ep.InsecureSkipVerify && Config.InsecureSkipVerify {
+		if !ep.InsecureSkipVerify && isHTTPS && Config.InsecureSkipVerify {
 			ep.InsecureSkipVerify = true
+		}
+
+		// --- AMQP required & normalization ---
+		if ep.AMQP == nil {
+			log.Fatal().Str("management_url", ep.URL).Msg("amqp object is required per endpoint")
+		}
+		if strings.TrimSpace(ep.AMQP.URL) == "" {
+			log.Fatal().Str("management_url", ep.URL).Msg("amqp.url is required per endpoint")
+		}
+		if strings.TrimSpace(ep.AMQP.Vhost) == "" {
+			log.Fatal().Str("management_url", ep.URL).Msg("amqp.vhost is required per endpoint")
+		}
+
+		// If AMQP URL contains userinfo, extract it and strip from URL
+		if ep.AMQP.URL != "" {
+			amqpURL, err := url.Parse(ep.AMQP.URL)
+			if err != nil {
+				log.Fatal().Err(err).Str("url", ep.AMQP.URL).Msg("Invalid AMQP endpoint URL")
+			}
+			if amqpURL.User != nil {
+				if name := amqpURL.User.Username(); name != "" {
+					ep.AMQP.Username = name
+				}
+				if pw, ok := amqpURL.User.Password(); ok {
+					ep.AMQP.Password = pw
+				}
+				amqpURL.User = nil
+				ep.AMQP.URL = amqpURL.String()
+			}
+			isAMQPS := amqpURL.Scheme == "amqps"
+			if ep.AMQP.CAFile == "" && isAMQPS && Config.RabbitClusterCertChainFile != "" {
+				ep.AMQP.CAFile = Config.RabbitClusterCertChainFile
+			}
+			if !ep.AMQP.InsecureSkipVerify && isAMQPS && Config.InsecureSkipVerify {
+				ep.AMQP.InsecureSkipVerify = true
+			}
+		}
+
+		// Inherit credentials from management if missing
+		if ep.AMQP.Username == "" {
+			ep.AMQP.Username = ep.Username
+		}
+		if ep.AMQP.Password == "" {
+			ep.AMQP.Password = ep.Password
+		}
+
+		// Apply global TLS defaults if AMQP omits its own
+		if ep.AMQP.CAFile == "" && Config.RabbitClusterCertChainFile != "" {
+			ep.AMQP.CAFile = Config.RabbitClusterCertChainFile
+		}
+		if !ep.AMQP.InsecureSkipVerify && Config.InsecureSkipVerify {
+			ep.AMQP.InsecureSkipVerify = true
 		}
 	}
 

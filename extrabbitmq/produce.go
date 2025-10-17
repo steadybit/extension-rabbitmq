@@ -3,16 +3,14 @@
 
 package extrabbitmq
 
-/*
 import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/extension-kit/extutil"
-	"github.com/steadybit/extension-rabbitmq/config"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,9 +43,9 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMess
 	if state.MaxConcurrent == 0 {
 		return nil, fmt.Errorf("max concurrent can't be zero")
 	}
-	state.NumberOfRecords = extutil.ToUInt64(request.Config["numberOfRecords"])
-	state.RecordKey = extutil.ToString(request.Config["recordKey"])
-	state.RecordValue = extutil.ToString(request.Config["recordValue"])
+	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
+	state.RoutingKey = extutil.ToString(request.Config["routingKey"])
+	state.Body = extutil.ToString(request.Config["body"])
 	state.ExecutionID = request.ExecutionId
 
 	var err error
@@ -95,75 +93,71 @@ func initExecutionRunData(state *ProduceMessageAttackState) {
 func saveExecutionRunData(executionID uuid.UUID, executionRunData *ExecutionRunData) {
 	ExecutionRunDataMap.Store(executionID, executionRunData)
 }
-//
-//func createRecord(state *ProduceMessageAttackState) *kgo.Record {
-//	record := kgo.KeyStringRecord(state.RecordKey, state.RecordValue)
-//	record.Topic = state.Topic
-//
-//	if state.RecordHeaders != nil {
-//		for k, v := range state.RecordHeaders {
-//			record.Headers = append(record.Headers, kgo.RecordHeader{Key: k, Value: []byte(v)})
-//		}
-//	}
-//
-//	return record
-//}
 
-func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool) {
-	client, err := createNewClient(state.BrokerHosts)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to create client")
+func createPublishRequest(state *ProduceMessageAttackState) (exchange string, routingKey string, pub amqp.Publishing) {
+	// Map fields:
+	// - state.RecordValue -> message body
+	// - state.RecordKey   -> routing key (fallback to queue name)
+	// - state.Queue       -> routing key fallback
+	// - state.Exchange    -> target exchange (empty string means default exchange)
+
+	ex := state.Exchange // allow empty for default exchange routing to queue
+	rk := state.RoutingKey
+	if rk == "" {
+		rk = state.Queue
 	}
+
+	// Convert headers to amqp.Table
+	var hdrs amqp.Table
+	if len(state.RecordHeaders) > 0 {
+		hdrs = amqp.Table{}
+		for k, v := range state.RecordHeaders {
+			hdrs[k] = v
+		}
+	}
+
+	return ex, rk, amqp.Publishing{
+		Headers:      hdrs,
+		ContentType:  "text/plain",
+		Body:         []byte(state.Body),
+		DeliveryMode: amqp.Persistent,
+		Timestamp:    time.Now(),
+	}
+}
+
+// Example usage inside your worker loop (replace Kafka produce with Publish):
+func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMessageAttackState, checkEnded func(*ExecutionRunData, *ProduceMessageAttackState) bool) {
+	// connect to RabbitMQ using AMQP client instead of rabbit-hole
+	endpoint := "amqp://guest:guest@localhost:5672/" // default connection string; could be adapted from your config
+	conn, err := amqp.Dial(endpoint)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to connect to RabbitMQ via AMQP")
+		return
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to open a channel")
+		return
+	}
+	defer ch.Close()
+
 	for range executionRunData.jobs {
 		if !checkEnded(executionRunData, state) {
-			//var started = time.Now()
-			rec := createRecord(state)
+			exchange, routingKey, pub := createPublishRequest(state)
 
-			//var producedRecord *kgo.Record
-			_, err = client.ProduceSync(context.Background(), rec).First()
+			// publish to exchange (empty exchange routes to queue)
+			err = ch.PublishWithContext(context.Background(), exchange, routingKey, false, false, pub)
 			executionRunData.requestCounter.Add(1)
 
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to produce record")
-				//now := time.Now()
-				//executionRunData.metrics <- action_kit_api.Metric{
-				//	Metric: map[string]string{
-				//		"topic":    rec.Topic,
-				//		"producer": strconv.Itoa(int(rec.ProducerID)),
-				//		"brokers":  config.Config.SeedBrokers,
-				//		"error":    err.Error(),
-				//	},
-				//	Name:      extutil.Ptr("producer_response_time"),
-				//	Value:     float64(now.Sub(started).Milliseconds()),
-				//	Timestamp: now,
-				//}
+				log.Error().Err(err).Msg("Failed to publish message")
 			} else {
-				// Successfully produced the record
-				//recordProducerLatency := float64(producedRecord.Timestamp.Sub(started).Milliseconds())
-				//metricMap := map[string]string{
-				//	"topic":    rec.Topic,
-				//	"producer": strconv.Itoa(int(rec.ProducerID)),
-				//	"brokers":  config.Config.SeedBrokers,
-				//	"error":    "",
-				//}
-
 				executionRunData.requestSuccessCounter.Add(1)
-
-				//metric := action_kit_api.Metric{
-				//	Name:      extutil.Ptr("record_latency"),
-				//	Metric:    metricMap,
-				//	Value:     recordProducerLatency,
-				//	Timestamp: producedRecord.Timestamp,
-				//}
-				//executionRunData.metrics <- metric
 			}
 		}
 	}
-	err = client.Flush(context.Background())
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to flush")
-	}
-	defer client.Close()
 }
 
 func start(state *ProduceMessageAttackState) {
@@ -254,4 +248,3 @@ func stopTickers(executionRunData *ExecutionRunData) {
 		log.Debug().Msg("Ticker already stopped")
 	}
 }
-*/

@@ -2,16 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Steadybit GmbH
 package extrabbitmq
 
-/*
 import (
 	"context"
 	"errors"
-	"fmt"
-	"github.com/steadybit/extension-rabbitmq/config"
-	"time"
-
-	"github.com/google/uuid"
-	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
@@ -24,17 +17,17 @@ type produceRabbitFixedAmountAction struct{}
 
 // ensure interfaces
 var (
-	_ action_kit_sdk.Action[RabbitMQAttackState]           = (*produceRabbitFixedAmountAction)(nil)
-	_ action_kit_sdk.ActionWithStatus[RabbitMQAttackState] = (*produceRabbitFixedAmountAction)(nil)
-	_ action_kit_sdk.ActionWithStop[RabbitMQAttackState]   = (*produceRabbitFixedAmountAction)(nil)
+	_ action_kit_sdk.Action[ProduceMessageAttackState]           = (*produceRabbitFixedAmountAction)(nil)
+	_ action_kit_sdk.ActionWithStatus[ProduceMessageAttackState] = (*produceRabbitFixedAmountAction)(nil)
+	_ action_kit_sdk.ActionWithStop[ProduceMessageAttackState]   = (*produceRabbitFixedAmountAction)(nil)
 )
 
-func NewProduceRabbitFixedAmount() action_kit_sdk.Action[RabbitMQAttackState] {
+func NewProduceRabbitFixedAmount() action_kit_sdk.Action[ProduceMessageAttackState] {
 	return &produceRabbitFixedAmountAction{}
 }
 
-func (a *produceRabbitFixedAmountAction) NewEmptyState() RabbitMQAttackState {
-	return RabbitMQAttackState{}
+func (a *produceRabbitFixedAmountAction) NewEmptyState() ProduceMessageAttackState {
+	return ProduceMessageAttackState{}
 }
 
 func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescription {
@@ -103,34 +96,22 @@ func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 	}
 }
 
-// RabbitMQAttackState mirrors the project's state pattern.
-// Keep fields that prepare/start/stop helpers expect.
-type RabbitMQAttackState struct {
-	ExecutionID              uuid.UUID `json:"executionId"`
-	NumberOfMessages         int64     `json:"numberOfMessages"`
-	DelayBetweenRequestsInMS int64     `json:"delayBetweenRequestsInMS"`
-	Vhost                    string    `json:"vhost"`
-	Exchange                 string    `json:"exchange"`
-	RoutingKey               string    `json:"routingKey"`
-	Body                     string    `json:"body"`
-	MaxConcurrent            int       `json:"maxConcurrent"`
-	// plus any fields your project uses (e.g., StartedAt, etc.)
-}
-
-func getDelayBetweenRequestsInMsForMessages(durationMs int64, count int64) int64 {
-	if durationMs > 0 && count > 0 {
-		return durationMs / count
+func getDelayBetweenRequestsInMsFixedAmount(duration uint64, numberOfRequests uint64) uint64 {
+	actualRequests := numberOfRequests - 1
+	if actualRequests > 0 {
+		return duration / actualRequests
+	} else {
+		return 1000 / 1
 	}
-	return 1000
 }
 
 // Prepare validates request and sets up state. It defers to shared prepare helpers where available.
-func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *RabbitMQAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
+func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *ProduceMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
 	if extutil.ToInt64(request.Config["duration"]) == 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}
-	state.NumberOfMessages = extutil.ToInt64(request.Config["numberOfMessages"])
-	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsForMessages(extutil.ToInt64(request.Config["duration"]), state.NumberOfMessages)
+	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
+	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
 	state.Vhost = extutil.ToString(request.Config["vhost"])
 	state.Exchange = extutil.ToString(request.Config["exchange"])
 	state.RoutingKey = extutil.ToString(request.Config["routingKey"])
@@ -140,16 +121,16 @@ func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *Rab
 	return prepare(request, state, checkEndedProduceRabbitFixedAmount)
 }
 
-func checkEndedProduceRabbitFixedAmount(executionRunData *ExecutionRunData, state *RabbitMQAttackState) bool {
+func checkEndedProduceRabbitFixedAmount(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool {
 	return executionRunData.requestCounter.Load() >= state.NumberOfMessages
 }
 
-func (a *produceRabbitFixedAmountAction) Start(ctx context.Context, state *RabbitMQAttackState) (*action_kit_api.StartResult, error) {
+func (a *produceRabbitFixedAmountAction) Start(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StartResult, error) {
 	start(state) // reuse existing start helper which should launch worker goroutines
 	return nil, nil
 }
 
-func (a *produceRabbitFixedAmountAction) Status(ctx context.Context, state *RabbitMQAttackState) (*action_kit_api.StatusResult, error) {
+func (a *produceRabbitFixedAmountAction) Status(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StatusResult, error) {
 	executionRunData, err := loadExecutionRunData(state.ExecutionID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load execution run data")
@@ -169,80 +150,6 @@ func (a *produceRabbitFixedAmountAction) Status(ctx context.Context, state *Rabb
 	}, nil
 }
 
-func (a *produceRabbitFixedAmountAction) Stop(ctx context.Context, state *RabbitMQAttackState) (*action_kit_api.StopResult, error) {
+func (a *produceRabbitFixedAmountAction) Stop(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StopResult, error) {
 	return stop(state)
 }
-
-// The worker function used by your shared start/runner helpers.
-// It publishes one message via rabbit-hole Publish API and increments counters.
-func rabbitPublishOnce(client *rabbithole.Client, state *RabbitMQAttackState) error {
-	if client == nil {
-		return errors.New("management client is nil")
-	}
-
-	req := rabbithole.PublishRequest{
-		Properties:      map[string]interface{}{},
-		RoutingKey:      state.RoutingKey,
-		Payload:         state.Body,
-		PayloadEncoding: "string",
-	}
-
-	_, err := client.Publish(state.Vhost, state.Exchange, req)
-	return err
-}
-
-// This function will be called by the generic worker launcher in your project.
-// It demonstrates the publish loop and interaction with ExecutionRunData.
-// It assumes ExecutionRunData exposes: ctx, stopCh, requestCounter (atomic), metrics collector, and a semaphore for concurrency control.
-func runRabbitPublishLoop(executionID uuid.UUID, state *RabbitMQAttackState) {
-	executionRunData, err := loadExecutionRunData(executionID)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to load execution run data for publish loop")
-		return
-	}
-
-	// create management client using existing factory (createNewClient) and management URL from config or target attributes
-	// assume executionRunData holds the management URL in executionRunData.targetManagementURL or similar
-	// fallback to config.Config.ManagementURL if not present
-	mgmtURL := executionRunData.ManagementURL
-	if mgmtURL == "" {
-		mgmtURL = config.Config.ManagementURL
-	}
-	client, err := createNewClient(mgmtURL)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to create management client for publish loop")
-		return
-	}
-
-	ticker := time.NewTicker(time.Duration(state.DelayBetweenRequestsInMS) * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-executionRunData.Ctx.Done():
-			return
-		case <-executionRunData.StopCh:
-			return
-		case <-ticker.C:
-			// concurrency control if present
-			if executionRunData.Sem != nil {
-				executionRunData.Sem.Acquire()
-			}
-			err := rabbitPublishOnce(client, state)
-			if executionRunData.Sem != nil {
-				executionRunData.Sem.Release()
-			}
-			if err != nil {
-				log.Error().Err(err).Msg("publish failed")
-				// record metric/error via executionRunData if available
-			} else {
-				executionRunData.requestCounter.Add(1)
-			}
-			// when reached goal finish
-			if executionRunData.requestCounter.Load() >= state.NumberOfMessages {
-				return
-			}
-		}
-	}
-}
-*/
