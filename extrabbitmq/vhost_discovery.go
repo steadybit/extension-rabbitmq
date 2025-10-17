@@ -22,7 +22,6 @@ import (
 // Target type and icon
 const (
 	vhostTargetId = "com.steadybit.extension_rabbitmq.vhost"
-	rabbitIcon    = ""
 )
 
 // Discovery implementation
@@ -57,7 +56,7 @@ func (r *rabbitVhostDiscovery) DescribeTarget() discovery_kit_api.TargetDescript
 		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ vhost", Other: "RabbitMQ vhosts"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:     extutil.Ptr(rabbitIcon),
+		Icon:     extutil.Ptr(rabbitMQIcon),
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},

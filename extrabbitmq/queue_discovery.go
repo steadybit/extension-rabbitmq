@@ -3,6 +3,7 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -18,7 +19,6 @@ import (
 
 const (
 	queueTargetId   = "com.steadybit.extension_rabbitmq.queue"
-	queueIcon       = ""
 	queueRefreshSec = 60
 )
 
@@ -51,12 +51,13 @@ func (r *rabbitQueueDiscovery) DescribeTarget() discovery_kit_api.TargetDescript
 		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ queue", Other: "RabbitMQ queues"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:     extutil.Ptr(queueIcon),
+		Icon:     extutil.Ptr(rabbitMQIcon),
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},
 				{Attribute: "rabbitmq.queue.vhost"},
 				{Attribute: "rabbitmq.queue.name"},
+				{Attribute: "rabbitmq.amqp.url"},
 				{Attribute: "rabbitmq.queue.status"},
 				{Attribute: "rabbitmq.queue.durable"},
 				{Attribute: "rabbitmq.queue.auto_delete"},
@@ -73,6 +74,7 @@ func (r *rabbitQueueDiscovery) DescribeAttributes() []discovery_kit_api.Attribut
 		{Attribute: "rabbitmq.queue.status", Label: discovery_kit_api.PluralLabel{One: "Status", Other: "Status"}},
 		{Attribute: "rabbitmq.queue.durable", Label: discovery_kit_api.PluralLabel{One: "Durable", Other: "Durable"}},
 		{Attribute: "rabbitmq.queue.auto_delete", Label: discovery_kit_api.PluralLabel{One: "Auto-delete", Other: "Auto-delete"}},
+		{Attribute: "rabbitmq.amqp.url", Label: discovery_kit_api.PluralLabel{One: "AMQP URL", Other: "AMQP URLs"}},
 	}
 }
 
@@ -91,7 +93,8 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 			return nil, err
 		}
 		for _, q := range qs {
-			out = append(out, toQueueTarget(client.Endpoint, q))
+			amqpURL := resolveAMQPURLForClient(client.Endpoint)
+			out = append(out, toQueueTarget(client.Endpoint, amqpURL, q))
 		}
 		return out, nil
 	}
@@ -104,11 +107,12 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesQueues), nil
 }
 
-func toQueueTarget(mgmtURL string, q rabbithole.QueueInfo) discovery_kit_api.Target {
+func toQueueTarget(mgmtURL, amqpURL string, q rabbithole.QueueInfo) discovery_kit_api.Target {
 	label := q.Vhost + "/" + q.Name
 	attrs := map[string][]string{
 		"rabbitmq.queue.vhost":                   {q.Vhost},
 		"rabbitmq.queue.name":                    {q.Name},
+		"rabbitmq.amqp.url":                      {amqpURL},
 		"rabbitmq.queue.status":                  {q.Status},
 		"rabbitmq.queue.consumers":               {fmt.Sprintf("%d", q.Consumers)},
 		"rabbitmq.queue.messages":                {fmt.Sprintf("%d", q.Messages)},
@@ -116,6 +120,7 @@ func toQueueTarget(mgmtURL string, q rabbithole.QueueInfo) discovery_kit_api.Tar
 		"rabbitmq.queue.messages_unacknowledged": {fmt.Sprintf("%d", q.MessagesUnacknowledged)},
 		"rabbitmq.queue.durable":                 {fmt.Sprintf("%t", q.Durable)},
 		"rabbitmq.queue.auto_delete":             {fmt.Sprintf("%t", q.AutoDelete)},
+		"rabbitmq.mgmt.url":                      {mgmtURL},
 	}
 
 	return discovery_kit_api.Target{
@@ -124,4 +129,23 @@ func toQueueTarget(mgmtURL string, q rabbithole.QueueInfo) discovery_kit_api.Tar
 		TargetType: queueTargetId,
 		Attributes: attrs,
 	}
+}
+
+func resolveAMQPURLForClient(mgmtEndpoint string) string {
+	u, err := url.Parse(mgmtEndpoint)
+	if err != nil {
+		return ""
+	}
+	host := u.Host
+	for i := range config.Config.ManagementEndpoints {
+		ep := &config.Config.ManagementEndpoints[i]
+		epu, err := url.Parse(ep.URL)
+		if err != nil {
+			continue
+		}
+		if epu.Host == host && ep.AMQP != nil {
+			return ep.AMQP.URL
+		}
+	}
+	return ""
 }

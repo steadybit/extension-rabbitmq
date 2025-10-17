@@ -20,7 +20,6 @@ import (
 
 const (
 	exchangeTargetId   = "com.steadybit.extension_rabbitmq.exchange"
-	exchangeIcon       = ""
 	exchangeRefreshSec = 60
 )
 
@@ -53,7 +52,7 @@ func (r *rabbitExchangeDiscovery) DescribeTarget() discovery_kit_api.TargetDescr
 		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ exchange", Other: "RabbitMQ exchanges"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:     extutil.Ptr(exchangeIcon),
+		Icon:     extutil.Ptr(rabbitMQIcon),
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},

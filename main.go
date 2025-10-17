@@ -76,6 +76,7 @@ func registerHandlers(ctx context.Context) {
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitVhostDiscovery(ctx))
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitNodeDiscovery(ctx))
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitQueueDiscovery(ctx))
+	discovery_kit_sdk.Register(extrabbitmq.NewRabbitExchangeDiscovery(ctx))
 
 	// Actions:
 	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitFixedAmount())

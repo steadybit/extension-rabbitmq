@@ -36,7 +36,7 @@ func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 		Label:       "RabbitMQ: Produce (# of Messages)",
 		Description: "Publish a fixed number of messages to an exchange using the Management API.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(""),
+		Icon:        extutil.Ptr(rabbitMQIcon),
 		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
 			TargetType: queueTargetId,
 		}),
@@ -45,34 +45,11 @@ func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlInternal,
 		Parameters: []action_kit_api.ActionParameter{
-			{
-				Name:         "vhost",
-				Label:        "Vhost",
-				Type:         action_kit_api.ActionParameterTypeString,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("/"),
-			},
-			{
-				Name:         "exchange",
-				Label:        "Exchange",
-				Type:         action_kit_api.ActionParameterTypeString,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr(""),
-			},
-			{
-				Name:         "routingKey",
-				Label:        "Routing Key",
-				Type:         action_kit_api.ActionParameterTypeString,
-				Required:     extutil.Ptr(false),
-				DefaultValue: extutil.Ptr(""),
-			},
-			{
-				Name:         "body",
-				Label:        "Message body",
-				Type:         action_kit_api.ActionParameterTypeString,
-				Required:     extutil.Ptr(false),
-				DefaultValue: extutil.Ptr("test-message"),
-			},
+			vhost,
+			exchange,
+			recordKey,
+			headers,
+			body,
 			{
 				Name:         "numberOfMessages",
 				Label:        "Number of Messages",
@@ -82,10 +59,10 @@ func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 			},
 			{
 				Name:         "duration",
-				Label:        "Duration (ms)",
+				Label:        "Duration (seconds)",
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("1000"),
+				DefaultValue: extutil.Ptr("30"),
 			},
 			maxConcurrent,
 		},
@@ -110,13 +87,7 @@ func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *Pro
 	if extutil.ToInt64(request.Config["duration"]) == 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}
-	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
 	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
-	state.Vhost = extutil.ToString(request.Config["vhost"])
-	state.Exchange = extutil.ToString(request.Config["exchange"])
-	state.RoutingKey = extutil.ToString(request.Config["routingKey"])
-	state.Body = extutil.ToString(request.Config["body"])
-	state.MaxConcurrent = int(extutil.ToInt64(request.Config["maxConcurrent"]))
 	// reuse existing prepare if present in project
 	return prepare(request, state, checkEndedProduceRabbitFixedAmount)
 }

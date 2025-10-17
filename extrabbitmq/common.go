@@ -29,29 +29,38 @@ const (
 )
 
 var (
-	topic = action_kit_api.ActionParameter{
-		Name:        "topic",
-		Label:       "Topic",
-		Description: extutil.Ptr("The Topic to send records to"),
-		Type:        action_kit_api.ActionParameterTypeString,
-		Required:    extutil.Ptr(true),
+	vhost = action_kit_api.ActionParameter{
+		Name:         "vhost",
+		Label:        "Vhost",
+		Type:         action_kit_api.ActionParameterTypeString,
+		Required:     extutil.Ptr(true),
+		DefaultValue: extutil.Ptr("/"),
+	}
+	exchange = action_kit_api.ActionParameter{
+		Name:         "exchange",
+		Label:        "Exchange",
+		Description:  extutil.Ptr("By default it will be the queue unless you specify a specific exchange"),
+		Type:         action_kit_api.ActionParameterTypeString,
+		Required:     extutil.Ptr(true),
+		DefaultValue: extutil.Ptr(""),
 	}
 	recordKey = action_kit_api.ActionParameter{
-		Name:        "recordKey",
-		Label:       "Record key",
-		Description: extutil.Ptr("The Record Key. If none is set, the partition will be choose with round-robin algorithm."),
-		Type:        action_kit_api.ActionParameterTypeString,
+		Name:         "routingKey",
+		Label:        "Routing Key",
+		Type:         action_kit_api.ActionParameterTypeString,
+		Required:     extutil.Ptr(false),
+		DefaultValue: extutil.Ptr(""),
 	}
-	recordValue = action_kit_api.ActionParameter{
-		Name:        "recordValue",
-		Label:       "Record value",
-		Description: extutil.Ptr("The Record Value."),
-		Type:        action_kit_api.ActionParameterTypeString,
-		Required:    extutil.Ptr(true),
+	body = action_kit_api.ActionParameter{
+		Name:         "body",
+		Label:        "Message body",
+		Type:         action_kit_api.ActionParameterTypeString,
+		Required:     extutil.Ptr(false),
+		DefaultValue: extutil.Ptr("test-message"),
 	}
-	recordHeaders = action_kit_api.ActionParameter{
-		Name:        "recordHeaders",
-		Label:       "Record Headers",
+	headers = action_kit_api.ActionParameter{
+		Name:        "headers",
+		Label:       "Message Headers",
 		Description: extutil.Ptr("The Record Headers."),
 		Type:        action_kit_api.ActionParameterTypeKeyValue,
 	}
@@ -245,19 +254,6 @@ func dialAMQP(amqpUrl string, user, pass string, insecure bool, ca string) (*amq
 	}
 }
 
-func dialAMQPWithTLSRaw(amqpURL *url.URL, tlsCfg *tls.Config) (*amqp.Connection, *amqp.Channel, error) {
-	conn, err := amqp.DialTLS(amqpURL.String(), tlsCfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	ch, err := conn.Channel()
-	if err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
-	return conn, ch, nil
-}
-
 // FetchTargetPerClient iterates over all configured management endpoints, creates a client for each
 // and calls the provided handler. The handler may return zero or more targets. All collected targets from
 // all endpoints are concatenated and returned. Individual endpoint errors are logged and do not stop iteration.
@@ -295,9 +291,13 @@ type ProduceMessageAttackState struct {
 	Body                     string
 	NumberOfMessages         uint64
 	ExecutionID              uuid.UUID
-	RecordHeaders            map[string]string
-	ConsumerGroup            string
-	BrokerHosts              []string
+	Headers                  map[string]string
+	// AMQP configuration
+	AmqpURL                string
+	AmqpUser               string
+	AmqpPassword           string
+	AmqpInsecureSkipVerify bool
+	AmqpCA                 string
 }
 
 func setEndpointsJSON(eps []config.ManagementEndpoint) {

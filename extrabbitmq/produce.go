@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/extension-kit/extutil"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ var (
 )
 
 func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
+	var err error
 	if len(request.Target.Attributes["rabbitmq.queue.name"]) == 0 {
 		return nil, fmt.Errorf("the target is missing the rabbitmq.queue.name attribute")
 	}
@@ -48,13 +50,38 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMess
 	state.Body = extutil.ToString(request.Config["body"])
 	state.ExecutionID = request.ExecutionId
 
-	var err error
-	if _, ok := request.Config["recordHeaders"]; ok {
-		state.RecordHeaders, err = extutil.ToKeyValue(request.Config, "recordHeaders")
+	//AMQP Config
+	configAmqp, found := config.GetEndpointByAMQPURL(extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.amqp.url")[0])
+	if !found {
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to retrieve corresponding amqp configuration for target")
+			return nil, err
+		}
+	}
+	state.AmqpURL = configAmqp.AMQP.URL
+	state.AmqpUser = configAmqp.AMQP.Username
+	state.AmqpPassword = configAmqp.AMQP.Password
+	state.AmqpCA = configAmqp.AMQP.CAFile
+	state.AmqpInsecureSkipVerify = configAmqp.AMQP.InsecureSkipVerify
+
+	if _, ok := request.Config["headers"]; ok {
+		state.Headers, err = extutil.ToKeyValue(request.Config, "headers")
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to parse headers")
 			return nil, err
 		}
+	}
+
+	// Ensure a positive tick interval. If not given, derive from duration/numberOfMessages or default.
+	if state.DelayBetweenRequestsInMS <= 0 {
+		per := int64(0)
+		if duration > 0 && state.NumberOfMessages > 0 {
+			per = duration / int64(state.NumberOfMessages)
+		}
+		if per <= 0 {
+			per = 100 // 100ms sensible default
+		}
+		state.DelayBetweenRequestsInMS = uint64(int(per))
 	}
 
 	initExecutionRunData(state)
@@ -109,9 +136,9 @@ func createPublishRequest(state *ProduceMessageAttackState) (exchange string, ro
 
 	// Convert headers to amqp.Table
 	var hdrs amqp.Table
-	if len(state.RecordHeaders) > 0 {
+	if len(state.Headers) > 0 {
 		hdrs = amqp.Table{}
-		for k, v := range state.RecordHeaders {
+		for k, v := range state.Headers {
 			hdrs[k] = v
 		}
 	}
@@ -127,28 +154,20 @@ func createPublishRequest(state *ProduceMessageAttackState) (exchange string, ro
 
 // Example usage inside your worker loop (replace Kafka produce with Publish):
 func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMessageAttackState, checkEnded func(*ExecutionRunData, *ProduceMessageAttackState) bool) {
-	// connect to RabbitMQ using AMQP client instead of rabbit-hole
-	endpoint := "amqp://guest:guest@localhost:5672/" // default connection string; could be adapted from your config
-	conn, err := amqp.Dial(endpoint)
+	amqpConn, amqpChan, err := dialAMQP(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to connect to RabbitMQ via AMQP")
 		return
 	}
-	defer conn.Close()
-
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to open a channel")
-		return
-	}
-	defer ch.Close()
+	defer amqpConn.Close()
+	defer amqpChan.Close()
 
 	for range executionRunData.jobs {
 		if !checkEnded(executionRunData, state) {
 			exchange, routingKey, pub := createPublishRequest(state)
 
 			// publish to exchange (empty exchange routes to queue)
-			err = ch.PublishWithContext(context.Background(), exchange, routingKey, false, false, pub)
+			err = amqpChan.PublishWithContext(context.Background(), exchange, routingKey, false, false, pub)
 			executionRunData.requestCounter.Add(1)
 
 			if err != nil {
@@ -165,7 +184,12 @@ func start(state *ProduceMessageAttackState) {
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load execution run data")
 	}
-	executionRunData.tickers = time.NewTicker(time.Duration(state.DelayBetweenRequestsInMS) * time.Millisecond)
+	interval := time.Duration(state.DelayBetweenRequestsInMS) * time.Millisecond
+	if interval <= 0 {
+		log.Warn().Uint64("DelayBetweenRequestsInMS", state.DelayBetweenRequestsInMS).Msg("non-positive interval; defaulting to 100ms")
+		interval = 100 * time.Millisecond
+	}
+	executionRunData.tickers = time.NewTicker(interval)
 	executionRunData.stopTicker = make(chan bool)
 
 	now := time.Now()

@@ -20,7 +20,6 @@ import (
 
 const (
 	nodeTargetId   = "com.steadybit.extension_rabbitmq.node"
-	nodeIcon       = ""
 	nodeRefreshSec = 60
 )
 
@@ -53,7 +52,7 @@ func (r *rabbitNodeDiscovery) DescribeTarget() discovery_kit_api.TargetDescripti
 		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ node", Other: "RabbitMQ nodes"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:     extutil.Ptr(nodeIcon),
+		Icon:     extutil.Ptr(rabbitMQIcon),
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},

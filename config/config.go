@@ -148,3 +148,18 @@ func ParseConfiguration() {
 func ValidateConfiguration() {
 	// You may optionally validate the configuration here.
 }
+
+// GetEndpointByAMQPURL returns the management endpoint configuration matching the provided AMQP URL.
+// It compares against the AMQP.URL field of each configured ManagementEndpoint.
+func GetEndpointByAMQPURL(amqpURL string) (*ManagementEndpoint, bool) {
+	if strings.TrimSpace(amqpURL) == "" {
+		return nil, false
+	}
+	for i := range Config.ManagementEndpoints {
+		ep := &Config.ManagementEndpoints[i]
+		if ep.AMQP != nil && ep.AMQP.URL == amqpURL {
+			return ep, true
+		}
+	}
+	return nil, false
+}
