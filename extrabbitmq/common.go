@@ -32,8 +32,9 @@ var (
 	vhost = action_kit_api.ActionParameter{
 		Name:         "vhost",
 		Label:        "Vhost",
+		Description:  extutil.Ptr("Virtual host (vhost) in which the target queue resides."),
 		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(true),
+		Required:     extutil.Ptr(false),
 		DefaultValue: extutil.Ptr("/"),
 	}
 	exchange = action_kit_api.ActionParameter{
@@ -41,10 +42,10 @@ var (
 		Label:        "Exchange",
 		Description:  extutil.Ptr("By default it will be the queue unless you specify a specific exchange"),
 		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(true),
+		Required:     extutil.Ptr(false),
 		DefaultValue: extutil.Ptr(""),
 	}
-	recordKey = action_kit_api.ActionParameter{
+	routingKey = action_kit_api.ActionParameter{
 		Name:         "routingKey",
 		Label:        "Routing Key",
 		Type:         action_kit_api.ActionParameterTypeString,
@@ -55,12 +56,13 @@ var (
 		Name:         "body",
 		Label:        "Message body",
 		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(false),
+		Required:     extutil.Ptr(true),
 		DefaultValue: extutil.Ptr("test-message"),
 	}
 	headers = action_kit_api.ActionParameter{
 		Name:        "headers",
 		Label:       "Message Headers",
+		Required:    extutil.Ptr(false),
 		Description: extutil.Ptr("The Record Headers."),
 		Type:        action_kit_api.ActionParameterTypeKeyValue,
 	}

@@ -12,6 +12,8 @@ import (
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/extension-kit/extutil"
 	"github.com/steadybit/extension-rabbitmq/config"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,15 +52,26 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMess
 	state.Body = extutil.ToString(request.Config["body"])
 	state.ExecutionID = request.ExecutionId
 
-	//AMQP Config
-	configAmqp, found := config.GetEndpointByAMQPURL(extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.amqp.url")[0])
+	// AMQP Config
+	amqpAttr := extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.amqp.url")[0]
+	configAmqp, found := config.GetEndpointByAMQPURL(amqpAttr)
 	if !found {
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to retrieve corresponding amqp configuration for target")
-			return nil, err
-		}
+		return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", amqpAttr)
 	}
-	state.AmqpURL = configAmqp.AMQP.URL
+
+	// determine vhost from target attributes
+	vhostAttr := "/"
+	if len(request.Target.Attributes["rabbitmq.queue.vhost"]) > 0 {
+		vhostAttr = request.Target.Attributes["rabbitmq.queue.vhost"][0]
+	}
+	state.Vhost = vhostAttr
+
+	finalAMQP, err := buildAMQPURL(configAmqp.AMQP.URL, vhostAttr, configAmqp.AMQP.Username, configAmqp.AMQP.Password)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to build AMQP URL")
+		return nil, err
+	}
+	state.AmqpURL = finalAMQP
 	state.AmqpUser = configAmqp.AMQP.Username
 	state.AmqpPassword = configAmqp.AMQP.Password
 	state.AmqpCA = configAmqp.AMQP.CAFile
@@ -121,6 +134,27 @@ func saveExecutionRunData(executionID uuid.UUID, executionRunData *ExecutionRunD
 	ExecutionRunDataMap.Store(executionID, executionRunData)
 }
 
+func buildAMQPURL(base, vhost, user, pass string) (string, error) {
+	if strings.TrimSpace(base) == "" {
+		return "", fmt.Errorf("amqp base URL empty")
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	// set vhost path
+	if vhost == "" || vhost == "/" {
+		u.Path = "/"
+	} else {
+		u.Path = "/" + url.PathEscape(strings.TrimPrefix(vhost, "/"))
+	}
+	// inject credentials if not present
+	if u.User == nil && (user != "" || pass != "") {
+		u.User = url.UserPassword(user, pass)
+	}
+	return u.String(), nil
+}
+
 func createPublishRequest(state *ProduceMessageAttackState) (exchange string, routingKey string, pub amqp.Publishing) {
 	// Map fields:
 	// - state.RecordValue -> message body
@@ -162,18 +196,67 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 	defer amqpConn.Close()
 	defer amqpChan.Close()
 
+	// Ensure target queue exists in the selected vhost without creating it (fail fast if missing)
+	if state.Queue != "" {
+		if _, qErr := amqpChan.QueueDeclarePassive(state.Queue, true, false, false, false, nil); qErr != nil {
+			log.Error().Err(qErr).Str("queue", state.Queue).Str("vhost", state.Vhost).Msg("Queue not found or inaccessible; aborting publish worker")
+			return
+		}
+	}
+
+	// Enable publisher confirms and set up listeners
+	if err := amqpChan.Confirm(false); err != nil {
+		log.Warn().Err(err).Msg("Publisher confirms not available; proceeding without confirms")
+	}
+	confirms := amqpChan.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*4))
+	returns := amqpChan.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*4))
+
+	// Log returned (unroutable) messages
+	go func() {
+		for r := range returns {
+			log.Warn().Str("exchange", r.Exchange).Str("routingKey", r.RoutingKey).Uint16("code", r.ReplyCode).Str("text", r.ReplyText).Msg("Message returned by broker (unroutable)")
+		}
+	}()
+
 	for range executionRunData.jobs {
 		if !checkEnded(executionRunData, state) {
-			exchange, routingKey, pub := createPublishRequest(state)
+			exchangeCreated, routingKey, pub := createPublishRequest(state)
 
-			// publish to exchange (empty exchange routes to queue)
-			err = amqpChan.PublishWithContext(context.Background(), exchange, routingKey, false, false, pub)
+			// Drain stale notifications
+			for {
+				select {
+				case <-confirms:
+					continue
+				case <-returns:
+					continue
+				default:
+					goto drained
+				}
+			}
+		drained:
+
+			// Publish with mandatory=true, immediate=false so unroutable messages are returned
+			mandatory := true
+			immediate := false
+			err = amqpChan.PublishWithContext(context.Background(), exchangeCreated, routingKey, mandatory, immediate, pub)
 			executionRunData.requestCounter.Add(1)
-
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to publish message")
-			} else {
-				executionRunData.requestSuccessCounter.Add(1)
+				log.Error().Err(err).Str("exchange", exchangeCreated).Str("routingKey", routingKey).Msg("Failed to publish message")
+				continue
+			}
+
+			select {
+			case r := <-returns:
+				log.Error().Str("exchange", r.Exchange).Str("routingKey", r.RoutingKey).Uint16("code", r.ReplyCode).Str("text", r.ReplyText).Msg("Message returned (unroutable)")
+				continue
+			case c := <-confirms:
+				if c.Ack {
+					executionRunData.requestSuccessCounter.Add(1)
+				} else {
+					log.Error().Str("exchange", exchangeCreated).Str("routingKey", routingKey).Msg("Publishing negatively acknowledged (nack)")
+				}
+			case <-time.After(5 * time.Second):
+				log.Error().Str("exchange", exchangeCreated).Str("routingKey", routingKey).Msg("No publish confirm within 5s")
 			}
 		}
 	}

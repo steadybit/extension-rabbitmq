@@ -47,7 +47,7 @@ func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 		Parameters: []action_kit_api.ActionParameter{
 			vhost,
 			exchange,
-			recordKey,
+			routingKey,
 			headers,
 			body,
 			{
