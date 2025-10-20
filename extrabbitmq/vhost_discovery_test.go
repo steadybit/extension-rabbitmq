@@ -13,12 +13,12 @@ import (
 
 // --- helpers ---
 
-type vhost struct {
+type vhostObject struct {
 	Name    string `json:"name"`
 	Tracing bool   `json:"tracing"`
 }
 
-func fakeMgmtVhostServer(t *testing.T, vhosts []vhost) *httptest.Server {
+func fakeMgmtVhostServer(t *testing.T, vhosts []vhostObject) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/vhosts", func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func resetCfg() func() {
 func TestGetAllVhosts_SingleEndpoint(t *testing.T) {
 	defer resetCfg()()
 
-	srv := fakeMgmtVhostServer(t, []vhost{{Name: "/", Tracing: false}, {Name: "dev", Tracing: true}})
+	srv := fakeMgmtVhostServer(t, []vhostObject{{Name: "/", Tracing: false}, {Name: "dev", Tracing: true}})
 	defer srv.Close()
 
 	setEndpointsJSON([]config.ManagementEndpoint{{URL: srv.URL}})
@@ -65,9 +65,9 @@ func TestGetAllVhosts_SingleEndpoint(t *testing.T) {
 func TestGetAllVhosts_MultipleEndpoints(t *testing.T) {
 	defer resetCfg()()
 
-	s1 := fakeMgmtVhostServer(t, []vhost{{Name: "alpha", Tracing: false}})
+	s1 := fakeMgmtVhostServer(t, []vhostObject{{Name: "alpha", Tracing: false}})
 	defer s1.Close()
-	s2 := fakeMgmtVhostServer(t, []vhost{{Name: "beta", Tracing: true}})
+	s2 := fakeMgmtVhostServer(t, []vhostObject{{Name: "beta", Tracing: true}})
 	defer s2.Close()
 
 	setEndpointsJSON([]config.ManagementEndpoint{{URL: s1.URL}, {URL: s2.URL}})
@@ -91,7 +91,7 @@ func TestGetAllVhosts_MultipleEndpoints(t *testing.T) {
 func TestGetAllVhosts_AttributeExcludes(t *testing.T) {
 	defer resetCfg()()
 
-	srv := fakeMgmtVhostServer(t, []vhost{{Name: "x", Tracing: true}})
+	srv := fakeMgmtVhostServer(t, []vhostObject{{Name: "x", Tracing: true}})
 	defer srv.Close()
 
 	setEndpointsJSON([]config.ManagementEndpoint{{URL: srv.URL}})

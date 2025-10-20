@@ -59,6 +59,7 @@ func (r *rabbitNodeDiscovery) DescribeTarget() discovery_kit_api.TargetDescripti
 				{Attribute: "rabbitmq.node.name"},
 				{Attribute: "rabbitmq.node.type"},
 				{Attribute: "rabbitmq.node.running"},
+				{Attribute: "rabbitmq.cluster.name"},
 			},
 			OrderBy: []discovery_kit_api.OrderBy{{Attribute: "steadybit.label", Direction: "ASC"}},
 		},
@@ -70,6 +71,7 @@ func (r *rabbitNodeDiscovery) DescribeAttributes() []discovery_kit_api.Attribute
 		{Attribute: "rabbitmq.node.name", Label: discovery_kit_api.PluralLabel{One: "Node name", Other: "Node names"}},
 		{Attribute: "rabbitmq.node.type", Label: discovery_kit_api.PluralLabel{One: "Node type", Other: "Node types"}},
 		{Attribute: "rabbitmq.node.running", Label: discovery_kit_api.PluralLabel{One: "Running state", Other: "Running states"}},
+		{Attribute: "rabbitmq.cluster.name", Label: discovery_kit_api.PluralLabel{One: "Cluster name", Other: "Cluster names"}},
 	}
 }
 
@@ -87,8 +89,13 @@ func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		if err != nil {
 			return nil, err
 		}
+		cn, _ := client.GetClusterName()
+		clusterName := ""
+		if cn != nil {
+			clusterName = cn.Name
+		}
 		for _, n := range nodes {
-			out = append(out, toNodeTarget(client.Endpoint, n))
+			out = append(out, toNodeTarget(client.Endpoint, n, clusterName))
 		}
 		return out, nil
 	}
@@ -100,10 +107,11 @@ func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, nil), nil
 }
 
-func toNodeTarget(mgmtURL string, n rabbithole.NodeInfo) discovery_kit_api.Target {
+func toNodeTarget(mgmtURL string, n rabbithole.NodeInfo, clusterName string) discovery_kit_api.Target {
 	attrs := map[string][]string{
 		"rabbitmq.node.name":    {n.Name},
 		"rabbitmq.node.type":    {n.NodeType},
+		"rabbitmq.cluster.name": {clusterName},
 		"rabbitmq.node.running": {fmt.Sprintf("%t", n.IsRunning)},
 	}
 

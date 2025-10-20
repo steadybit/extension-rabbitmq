@@ -6,6 +6,7 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
+	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"strconv"
 	"time"
@@ -23,9 +24,11 @@ const rabbitQueueTargetId = "com.steadybit.extension_rabbitmq.queue"
 type QueueBacklogCheckAction struct{}
 
 type QueueBacklogCheckState struct {
-	Vhost             string
-	Queue             string
-	AmqpURL           string
+	Vhost            string
+	Queue            string
+	AmqpURL          string
+	ManagementClient *rabbithole.Client
+
 	AcceptableBacklog int64
 	End               time.Time
 
@@ -127,7 +130,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 			},
 		}),
 		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("1s"),
+			CallInterval: extutil.Ptr("2s"),
 		}),
 	}
 }
@@ -174,7 +177,7 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 		return nil, err
 	}
 
-	mgmt, _, _, err := createNewClient(configMQ.URL, configMQ.InsecureSkipVerify, configMQ.CAFile, configMQ.AMQP)
+	mgmt, err := createNewManagementClient(configMQ.URL, configMQ.InsecureSkipVerify, configMQ.CAFile)
 	if err != nil {
 		return nil, extutil.Ptr(extension_kit.ToError(fmt.Sprintf("failed to init management client for %s: %v", mgmt.Endpoint, err), err))
 	}

@@ -38,12 +38,16 @@ var (
 		DefaultValue: extutil.Ptr("/"),
 	}
 	exchange = action_kit_api.ActionParameter{
-		Name:         "exchange",
-		Label:        "Exchange",
-		Description:  extutil.Ptr("By default it will be the queue unless you specify a specific exchange"),
-		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(false),
-		DefaultValue: extutil.Ptr(""),
+		Name:        "exchange",
+		Label:       "Exchange",
+		Description: extutil.Ptr("By default it will be the queue unless you specify a specific exchange"),
+		Type:        action_kit_api.ActionParameterTypeString,
+		Required:    extutil.Ptr(true),
+		Options: extutil.Ptr([]action_kit_api.ParameterOption{
+			action_kit_api.ParameterOptionsFromTargetAttribute{
+				Attribute: "rabbitmq.queue.bound_exchanges",
+			},
+		}),
 	}
 	routingKey = action_kit_api.ActionParameter{
 		Name:         "routingKey",
@@ -105,22 +109,18 @@ var (
 	}
 )
 
-func createNewClient(host string, insecureSkipVerify bool, caFile string, amqpConfig *config.AMQPOptions) (*rabbithole.Client, *amqp.Connection, *amqp.Channel, error) {
+func createNewManagementClient(host string, insecureSkipVerify bool, caFile string) (*rabbithole.Client, error) {
 	// host may be empty -> use first configured endpoint
 	if host == "" {
 		if len(config.Config.ManagementEndpoints) == 0 {
-			return nil, nil, nil, fmt.Errorf("no management endpoints configured")
+			return nil, fmt.Errorf("no management endpoints configured")
 		}
 		host = config.Config.ManagementEndpoints[0].URL
 	}
 
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-
 	u, err := url.Parse(host)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid host URL: %w", err)
+		return nil, fmt.Errorf("invalid host URL: %w", err)
 	}
 
 	// if TLS settings not provided explicitly use provided params
@@ -163,11 +163,9 @@ func createNewClient(host string, insecureSkipVerify bool, caFile string, amqpCo
 	if u.Scheme == "http" && !insecure && ca == "" {
 		mgmt, err := rabbithole.NewClient(u.String(), username, password)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
-		// Build AMQP connection using provided AMQP config
-		amqpConn, amqpChan, err := dialAMQP(amqpConfig.URL, amqpConfig.Username, amqpConfig.Password, amqpConfig.InsecureSkipVerify, amqpConfig.CAFile)
-		return mgmt, amqpConn, amqpChan, err
+		return mgmt, err
 	}
 
 	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -177,11 +175,11 @@ func createNewClient(host string, insecureSkipVerify bool, caFile string, amqpCo
 	if ca != "" {
 		pemBytes, readErr := os.ReadFile(ca)
 		if readErr != nil {
-			return nil, nil, nil, fmt.Errorf("read CA bundle: %w", readErr)
+			return nil, fmt.Errorf("read CA bundle: %w", readErr)
 		}
 		pool := x509.NewCertPool()
 		if ok := pool.AppendCertsFromPEM(pemBytes); !ok {
-			return nil, nil, nil, fmt.Errorf("failed to parse CA bundle in %s", ca)
+			return nil, fmt.Errorf("failed to parse CA bundle in %s", ca)
 		}
 		tlsCfg.RootCAs = pool
 	}
@@ -189,14 +187,13 @@ func createNewClient(host string, insecureSkipVerify bool, caFile string, amqpCo
 	transport := &http.Transport{TLSClientConfig: tlsCfg}
 	mgmt, err := rabbithole.NewTLSClient(u.String(), username, password, transport)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	amqpConn, amqpChan, err := dialAMQP(amqpConfig.URL, amqpConfig.Username, amqpConfig.Password, amqpConfig.InsecureSkipVerify, amqpConfig.CAFile)
-	return mgmt, amqpConn, amqpChan, err
+	return mgmt, err
 }
 
-func dialAMQP(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {
+func createNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {
 	if strings.TrimSpace(amqpUrl) == "" {
 		return nil, nil, fmt.Errorf("amqp url is empty")
 	}
@@ -266,7 +263,7 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_ap
 
 	all := make([]discovery_kit_api.Target, 0)
 	for _, ep := range config.Config.ManagementEndpoints {
-		client, _, _, err := createNewClient(ep.URL, ep.InsecureSkipVerify, ep.CAFile, ep.AMQP)
+		client, err := createNewManagementClient(ep.URL, ep.InsecureSkipVerify, ep.CAFile)
 		if err != nil {
 			log.Warn().Err(err).Str("endpoint", ep.URL).Msg("failed to create management client for endpoint")
 			continue

@@ -62,6 +62,7 @@ func (r *rabbitVhostDiscovery) DescribeTarget() discovery_kit_api.TargetDescript
 				{Attribute: "steadybit.label"},
 				{Attribute: "rabbitmq.vhost.name"},
 				{Attribute: "rabbitmq.vhost.tracing"},
+				{Attribute: "rabbitmq.cluster.name"},
 			},
 			OrderBy: []discovery_kit_api.OrderBy{{Attribute: "steadybit.label", Direction: "ASC"}},
 		},
@@ -72,6 +73,7 @@ func (r *rabbitVhostDiscovery) DescribeAttributes() []discovery_kit_api.Attribut
 	return []discovery_kit_api.AttributeDescription{
 		{Attribute: "rabbitmq.vhost.name", Label: discovery_kit_api.PluralLabel{One: "Vhost name", Other: "Vhost names"}},
 		{Attribute: "rabbitmq.vhost.tracing", Label: discovery_kit_api.PluralLabel{One: "Vhost tracing", Other: "Vhost tracing"}},
+		{Attribute: "rabbitmq.cluster.name", Label: discovery_kit_api.PluralLabel{One: "Cluster name", Other: "Cluster names"}},
 	}
 }
 
@@ -89,8 +91,13 @@ func getAllVhosts(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		if err != nil {
 			return nil, err
 		}
+		cn, _ := client.GetClusterName()
+		clusterName := ""
+		if cn != nil {
+			clusterName = cn.Name
+		}
 		for _, vh := range vhosts {
-			out = append(out, toVhostTarget(client.Endpoint, vh))
+			out = append(out, toVhostTarget(client.Endpoint, vh, clusterName))
 		}
 		return out, nil
 	}
@@ -102,10 +109,11 @@ func getAllVhosts(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesVhosts), nil
 }
 
-func toVhostTarget(mgmtURL string, vh rabbithole.VhostInfo) discovery_kit_api.Target {
+func toVhostTarget(mgmtURL string, vh rabbithole.VhostInfo, clusterName string) discovery_kit_api.Target {
 	attrs := map[string][]string{
 		"rabbitmq.vhost.name":    {vh.Name},
 		"rabbitmq.vhost.tracing": {fmt.Sprintf("%t", vh.Tracing)},
+		"rabbitmq.cluster.name":  {clusterName},
 	}
 
 	return discovery_kit_api.Target{

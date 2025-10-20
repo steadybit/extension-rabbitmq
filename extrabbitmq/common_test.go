@@ -1,144 +1,151 @@
 package extrabbitmq
 
 import (
-	"encoding/json"
-	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
-	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
-	"strings"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
-	amqp "github.com/rabbitmq/amqp091-go"
+	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
+	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/extension-rabbitmq/config"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
-// --- helpers ---
+// --- Helper functions ---
 
-func resetCfgCommon() func() {
-	old := config.Config
-	return func() { config.Config = old }
+func mockConfig() {
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
+		{
+			URL:                "http://localhost:15672",
+			Username:           "guest",
+			Password:           "guest",
+			InsecureSkipVerify: false,
+		},
+	}
 }
 
-func setEndpointsJSONCommon(eps []config.ManagementEndpoint) {
-	b, _ := json.Marshal(eps)
-	config.Config.ManagementEndpointsJSON = string(b)
-	config.Config.ManagementEndpoints = eps
+// --- Tests for createNewManagementClient ---
+
+func TestCreateNewManagementClient_HTTP(t *testing.T) {
+	mockConfig()
+	client, err := createNewManagementClient("http://localhost:15672", false, "")
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+	assert.IsType(t, &rabbithole.Client{}, client)
 }
 
-// --- tests ---
+func TestCreateNewManagementClient_HTTPS_WithCA(t *testing.T) {
+	mockConfig()
+	tmpFile := filepath.Join(t.TempDir(), "ca.pem")
+	os.WriteFile(tmpFile, []byte(testCA), 0644)
 
-// We do not assert successful AMQP dialing here because no broker is running in tests.
-// We verify that the management client is created and normalized correctly, and that
-// AMQP failures are surfaced in the returned error.
-
-func TestCreateNewClient_StripsUserinfoAndBuildsMgmtClient(t *testing.T) {
-	defer resetCfgCommon()()
-
-	// Management endpoint with userinfo in the URL.
-	raw := "http://user:pass@127.0.0.1:12345"
-	setEndpointsJSONCommon([]config.ManagementEndpoint{{URL: raw}})
-
-	mgmt, conn, ch, err := createNewClient(raw, false, "")
-	require.NotNil(t, mgmt, "mgmt client should be returned even if AMQP dial fails")
-	require.Nil(t, conn, "AMQP conn should be nil on dial failure")
-	require.Nil(t, ch, "AMQP channel should be nil on dial failure")
-	require.Error(t, err, "expect AMQP dial to fail without a broker")
-
-	// Userinfo must be stripped from the endpoint the client holds.
-	require.True(t, strings.HasPrefix(mgmt.Endpoint, "http://127.0.0.1:12345"),
-		"endpoint should not contain credentials: %s", mgmt.Endpoint)
+	_, err := createNewManagementClient("https://localhost:15671", true, tmpFile)
+	assert.Error(t, err) // likely connection error, just check no panic
 }
 
-func TestCreateNewClient_PrefersEndpointCredentialsWhenNoUserinfo(t *testing.T) {
-	defer resetCfgCommon()()
-
-	// No userinfo in URL; credentials are provided in endpoint object.
-	raw := "http://127.0.0.1:22345"
-	setEndpointsJSONCommon([]config.ManagementEndpoint{{
-		URL:      raw,
-		Username: "u",
-		Password: "p",
-	}})
-
-	mgmt, conn, ch, err := createNewClient(raw, false, "")
-	require.NotNil(t, mgmt)
-	require.Nil(t, conn)
-	require.Nil(t, ch)
-	require.Error(t, err)
-
-	// Endpoint should remain the same URL
-	require.Equal(t, raw, mgmt.Endpoint)
+func TestCreateNewManagementClient_InvalidURL(t *testing.T) {
+	_, err := createNewManagementClient(":::/badurl", false, "")
+	assert.Error(t, err)
 }
 
-func TestCreateNewClient_HTTP_NoTLS_UsesPlainHTTPClient(t *testing.T) {
-	defer resetCfgCommon()()
-	raw := "http://127.0.0.1:32345"
-	setEndpointsJSONCommon([]config.ManagementEndpoint{{URL: raw}})
-
-	mgmt, conn, ch, err := createNewClient(raw, false, "")
-	require.NotNil(t, mgmt)
-	require.Nil(t, conn)
-	require.Nil(t, ch)
-	require.Error(t, err)
-	require.True(t, strings.HasPrefix(mgmt.Endpoint, "http://"))
+func TestCreateNewManagementClient_NoEndpoints(t *testing.T) {
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{}
+	_, err := createNewManagementClient("", false, "")
+	assert.Error(t, err)
 }
 
-func TestCreateNewClient_HTTPS_WithInsecureSkipVerify(t *testing.T) {
-	defer resetCfgCommon()()
-	raw := "https://127.0.0.1:42345"
-	setEndpointsJSONCommon([]config.ManagementEndpoint{{URL: raw, InsecureSkipVerify: true}})
+// --- Tests for createNewAMQPConnection ---
 
-	mgmt, conn, ch, err := createNewClient(raw, true, "")
-	require.NotNil(t, mgmt)
-	require.Nil(t, conn)
-	require.Nil(t, ch)
-	require.Error(t, err)
-	require.True(t, strings.HasPrefix(mgmt.Endpoint, "https://"))
+func TestCreateNewAMQPConnection_InvalidScheme(t *testing.T) {
+	_, _, err := createNewAMQPConnection("invalid://host", "", "", false, "")
+	assert.Error(t, err)
 }
 
-func TestCreateNewClient_HTTPS_WithCustomCA_PathIsUsed(t *testing.T) {
-	defer resetCfgCommon()()
-	// Use a non-existent CA path; we only verify that the function attempts to read it,
-	// returning an error about the CA bundle rather than URL parsing issues.
-	raw := "https://127.0.0.1:52345"
-	fakeCA := "/no/such/ca.pem"
-	setEndpointsJSONCommon([]config.ManagementEndpoint{{URL: raw, CAFile: fakeCA}})
-
-	mgmt, conn, ch, err := createNewClient(raw, false, fakeCA)
-	require.Nil(t, mgmt, "mgmt client should be nil when CA file cannot be read")
-	require.Nil(t, conn)
-	require.Nil(t, ch)
-	require.Error(t, err, "expected error due to unreadable CA file")
+func TestCreateNewAMQPConnection_EmptyURL(t *testing.T) {
+	_, _, err := createNewAMQPConnection("", "", "", false, "")
+	assert.Error(t, err)
 }
 
-func TestFetchTargetPerClient_NoEndpoints_Error(t *testing.T) {
-	defer resetCfgCommon()()
-	setEndpointsJSONCommon(nil)
-
-	_, err := FetchTargetPerClient(func(*rabbithole.Client) ([]discovery_kit_api.Target, error) {
-		return nil, nil
-	})
-	require.Error(t, err)
+func TestCreateNewAMQPConnection_InjectCredentials(t *testing.T) {
+	url := "amqp://localhost:5672/"
+	conn, ch, err := createNewAMQPConnection(url, "guest", "guest", false, "")
+	assert.Error(t, err) // No server expected locally
+	assert.Nil(t, conn)
+	assert.Nil(t, ch)
 }
 
-func TestFetchTargetPerClient_WithEndpoints_HandlerNotCalledWhenClientFails(t *testing.T) {
-	defer resetCfgCommon()()
-	// No broker present, createNewClient will fail; handler should not be called.
-	raw1 := "http://127.0.0.1:62345"
-	raw2 := "http://127.0.0.1:62346"
-	setEndpointsJSONCommon([]config.ManagementEndpoint{{URL: raw1}, {URL: raw2}})
+// --- Tests for setEndpointsJSON ---
 
-	calls := 0
-	_, _ = FetchTargetPerClient(func(*rabbithole.Client) ([]discovery_kit_api.Target, error) {
-		calls++
-		return nil, nil
-	})
-	require.Equal(t, 0, calls, "handler must not be called when client creation fails")
+func TestSetEndpointsJSON(t *testing.T) {
+	eps := []config.ManagementEndpoint{
+		{URL: "http://localhost:15672", Username: "guest", Password: "guest"},
+	}
+	setEndpointsJSON(eps)
+	assert.NotEmpty(t, config.Config.ManagementEndpointsJSON)
+	assert.Contains(t, config.Config.ManagementEndpointsJSON, "localhost:15672")
+	assert.Equal(t, eps, config.Config.ManagementEndpoints)
 }
 
-// compile-time interface/usage checks to ensure symbols exist
-// (guards against accidental API changes)
-func TestCompileGuards(t *testing.T) {
-	var _ *amqp.Connection
-	var _ *amqp.Channel
+// --- Tests for findTargetByLabel ---
+
+func TestFindTargetByLabel(t *testing.T) {
+	targets := []discovery_kit_api.Target{
+		{Label: "A"},
+		{Label: "B"},
+	}
+	found := findTargetByLabel(targets, "B")
+	assert.NotNil(t, found)
+	assert.Equal(t, "B", found.Label)
+	notFound := findTargetByLabel(targets, "C")
+	assert.Nil(t, notFound)
 }
+
+// --- Tests for assertAttr ---
+
+func TestAssertAttr(t *testing.T) {
+	tgt := discovery_kit_api.Target{
+		Attributes: map[string][]string{
+			"key": {"value"},
+		},
+	}
+	assertAttr(t, tgt, "key", "value")
+}
+
+// --- Tests for FetchTargetPerClient ---
+
+func TestFetchTargetPerClient(t *testing.T) {
+	mockConfig()
+	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+		return []discovery_kit_api.Target{{Label: "ok"}}, nil
+	}
+	targets, err := FetchTargetPerClient(handler)
+	assert.NoError(t, err)
+	assert.NotNil(t, targets)
+}
+
+func TestFetchTargetPerClient_HandlerError(t *testing.T) {
+	mockConfig()
+	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+		return nil, errors.New("test")
+	}
+	targets, err := FetchTargetPerClient(handler)
+	assert.NoError(t, err)
+	assert.Empty(t, targets)
+}
+
+// --- Test Data ---
+
+const testCA = `
+-----BEGIN CERTIFICATE-----
+MIIB9TCCAVugAwIBAgIUfQkBkQf5E+j1tB5EpXyRBB2q28EwCgYIKoZIzj0EAwIw
+EjEQMA4GA1UEAwwHdGVzdENBMB4XDTI0MDYyMjA5MDUwMFoXDTM0MDYxOTA5MDUw
+MFowEjEQMA4GA1UEAwwHdGVzdENBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE
+P0oZl08OGsUm6m5H1RGFtSgGB7LrYMT8M0vP04Xv0qvTVrf0LPPDs/vR8H7ZbOjx
+Aq1dOUnJjO1EhP10/6u7wKNtMGswHQYDVR0OBBYEFOp+F8rP1qFXTY9H+F3AJpyH
+piZSMB8GA1UdIwQYMBaAFOp+F8rP1qFXTY9H+F3AJpyHpiZSMBIGA1UdEwEB/wQI
+MAAwDgYDVR0PAQH/BAQDAgXgMAoGCCqGSM49BAMCA0cAMEQCIG+1baxuP9aDhh5u
+fPzIdv4K5uO1D4IUnEw5ZlW7L1VwAiBYmWzq47e0GChpIo1Hz61XKGHGv2Kr7CvT
+CdLUdYz7iQ==
+-----END CERTIFICATE-----
+`

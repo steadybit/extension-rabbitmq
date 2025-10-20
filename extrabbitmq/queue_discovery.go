@@ -55,6 +55,7 @@ func (r *rabbitQueueDiscovery) DescribeTarget() discovery_kit_api.TargetDescript
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},
+				{Attribute: "rabbitmq.cluster.name"},
 				{Attribute: "rabbitmq.queue.vhost"},
 				{Attribute: "rabbitmq.queue.name"},
 				{Attribute: "rabbitmq.amqp.url"},
@@ -75,6 +76,7 @@ func (r *rabbitQueueDiscovery) DescribeAttributes() []discovery_kit_api.Attribut
 		{Attribute: "rabbitmq.queue.durable", Label: discovery_kit_api.PluralLabel{One: "Durable", Other: "Durable"}},
 		{Attribute: "rabbitmq.queue.auto_delete", Label: discovery_kit_api.PluralLabel{One: "Auto-delete", Other: "Auto-delete"}},
 		{Attribute: "rabbitmq.amqp.url", Label: discovery_kit_api.PluralLabel{One: "AMQP URL", Other: "AMQP URLs"}},
+		{Attribute: "rabbitmq.cluster.name", Label: discovery_kit_api.PluralLabel{One: "Cluster name", Other: "Cluster names"}},
 	}
 }
 
@@ -94,7 +96,13 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		}
 		for _, q := range qs {
 			amqpURL := resolveAMQPURLForClient(client.Endpoint)
-			out = append(out, toQueueTarget(client.Endpoint, amqpURL, q))
+			cn, _ := client.GetClusterName()
+			clusterName := ""
+			if cn != nil {
+				clusterName = cn.Name
+			}
+
+			out = append(out, toQueueTarget(client.Endpoint, amqpURL, q, clusterName))
 		}
 		return out, nil
 	}
@@ -107,20 +115,15 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesQueues), nil
 }
 
-func toQueueTarget(mgmtURL, amqpURL string, q rabbithole.QueueInfo) discovery_kit_api.Target {
+func toQueueTarget(mgmtURL, amqpURL string, q rabbithole.QueueInfo, cluster string) discovery_kit_api.Target {
 	label := q.Vhost + "/" + q.Name
 	attrs := map[string][]string{
-		"rabbitmq.queue.vhost":                   {q.Vhost},
-		"rabbitmq.queue.name":                    {q.Name},
-		"rabbitmq.amqp.url":                      {amqpURL},
-		"rabbitmq.queue.status":                  {q.Status},
-		"rabbitmq.queue.consumers":               {fmt.Sprintf("%d", q.Consumers)},
-		"rabbitmq.queue.messages":                {fmt.Sprintf("%d", q.Messages)},
-		"rabbitmq.queue.messages_ready":          {fmt.Sprintf("%d", q.MessagesReady)},
-		"rabbitmq.queue.messages_unacknowledged": {fmt.Sprintf("%d", q.MessagesUnacknowledged)},
-		"rabbitmq.queue.durable":                 {fmt.Sprintf("%t", q.Durable)},
-		"rabbitmq.queue.auto_delete":             {fmt.Sprintf("%t", q.AutoDelete)},
-		"rabbitmq.mgmt.url":                      {mgmtURL},
+		"rabbitmq.queue.vhost":  {q.Vhost},
+		"rabbitmq.queue.name":   {q.Name},
+		"rabbitmq.cluster.name": {cluster},
+		"rabbitmq.amqp.url":     {amqpURL},
+		"rabbitmq.queue.status": {q.Status},
+		"rabbitmq.mgmt.url":     {mgmtURL},
 	}
 
 	return discovery_kit_api.Target{
@@ -149,3 +152,26 @@ func resolveAMQPURLForClient(mgmtEndpoint string) string {
 	}
 	return ""
 }
+
+//func getQueueBoundExchanges(client *rabbithole.Client, vhost, queue string) []string {
+//	bindings, err := client.ListQueueBindings(vhost, queue)
+//	if err != nil {
+//		log.Warn().Err(err).Str("vhost", vhost).Str("queue", queue).Msg("failed to list queue bindings")
+//		return nil
+//	}
+//	// Collect unique sources (exchanges) for this queue
+//	set := make(map[string]struct{})
+//	for _, b := range bindings {
+//		if b.Source != "" { // source is the exchange name
+//			set[b.Source] = struct{}{}
+//		}
+//	}
+//	if len(set) == 0 {
+//		return nil
+//	}
+//	out := make([]string, 0, len(set))
+//	for s := range set {
+//		out = append(out, s)
+//	}
+//	return out
+//}
