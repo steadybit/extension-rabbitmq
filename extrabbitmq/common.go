@@ -19,6 +19,7 @@ import (
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
 )
 
@@ -253,7 +254,7 @@ func createNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, c
 	}
 }
 
-// FetchTargetPerClient iterates over all configured management endpoints, creates a client for each
+// FetchTargetPerClient iterates over all configured management endpoints, reusing pooled clients,
 // and calls the provided handler. The handler may return zero or more targets. All collected targets from
 // all endpoints are concatenated and returned. Individual endpoint errors are logged and do not stop iteration.
 func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_api.Target, error)) ([]discovery_kit_api.Target, error) {
@@ -263,12 +264,12 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_ap
 
 	all := make([]discovery_kit_api.Target, 0)
 	for _, ep := range config.Config.ManagementEndpoints {
-		client, err := createNewManagementClient(ep.URL, ep.InsecureSkipVerify, ep.CAFile)
-		if err != nil {
-			log.Warn().Err(err).Str("endpoint", ep.URL).Msg("failed to create management client for endpoint")
+		c, ok := clients.GetByMgmtURL(ep.URL)
+		if !ok || c == nil || c.Mgmt == nil {
+			log.Warn().Str("endpoint", ep.URL).Msg("no pooled management client for endpoint")
 			continue
 		}
-		tgts, err := fn(client)
+		tgts, err := fn(c.Mgmt)
 		if err != nil {
 			log.Warn().Err(err).Str("endpoint", ep.URL).Msg("handler returned error for endpoint")
 			continue

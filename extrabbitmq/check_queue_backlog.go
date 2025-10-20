@@ -5,9 +5,8 @@ package extrabbitmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
-	"github.com/steadybit/extension-rabbitmq/config"
 	"strconv"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	extension_kit "github.com/steadybit/extension-kit"
 	"github.com/steadybit/extension-kit/extbuild"
 	"github.com/steadybit/extension-kit/extutil"
+	"github.com/steadybit/extension-rabbitmq/clients"
 )
 
 // Adjust to your actual target type id for queues
@@ -24,10 +24,9 @@ const rabbitQueueTargetId = "com.steadybit.extension_rabbitmq.queue"
 type QueueBacklogCheckAction struct{}
 
 type QueueBacklogCheckState struct {
-	Vhost            string
-	Queue            string
-	AmqpURL          string
-	ManagementClient *rabbithole.Client
+	Vhost   string
+	Queue   string
+	AmqpURL string
 
 	AcceptableBacklog int64
 	End               time.Time
@@ -171,16 +170,12 @@ func (a *QueueBacklogCheckAction) Status(ctx context.Context, state *QueueBacklo
 func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState) (*action_kit_api.StatusResult, error) {
 	now := time.Now()
 
-	// create management client; AMQP not required here
-	configMQ, err := config.GetEndpointByAMQPURL(state.AmqpURL)
-	if err != nil {
-		return nil, err
+	// reuse pooled client for this AMQP URL
+	c, ok := clients.GetByAMQPURL(state.AmqpURL)
+	if !ok || c == nil || c.Mgmt == nil {
+		return nil, extutil.Ptr(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
 	}
-
-	mgmt, err := createNewManagementClient(configMQ.URL, configMQ.InsecureSkipVerify, configMQ.CAFile)
-	if err != nil {
-		return nil, extutil.Ptr(extension_kit.ToError(fmt.Sprintf("failed to init management client for %s: %v", mgmt.Endpoint, err), err))
-	}
+	mgmt := c.Mgmt
 
 	qi, err := mgmt.GetQueue(state.Vhost, state.Queue)
 	if err != nil {
