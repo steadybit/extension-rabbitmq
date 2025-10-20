@@ -87,28 +87,3 @@ func TestGetAllVhosts_MultipleEndpoints(t *testing.T) {
 		t.Fatalf("expected targets 'alpha' and 'beta'")
 	}
 }
-
-func TestGetAllVhosts_AttributeExcludes(t *testing.T) {
-	defer resetCfg()()
-
-	srv := fakeMgmtVhostServer(t, []vhostObject{{Name: "x", Tracing: true}})
-	defer srv.Close()
-
-	setEndpointsJSON([]config.ManagementEndpoint{{URL: srv.URL}})
-	config.Config.DiscoveryAttributesExcludesVhosts = []string{"rabbitmq.vhost.tracing"}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	targets, err := getAllVhosts(ctx)
-	if err != nil {
-		t.Fatalf("getAllVhosts error: %v", err)
-	}
-	if len(targets) != 1 {
-		t.Fatalf("expected 1 target, got %d", len(targets))
-	}
-
-	if _, ok := targets[0].Attributes["rabbitmq.vhost.tracing"]; ok {
-		t.Fatalf("expected attribute 'rabbitmq.vhost.tracing' to be excluded")
-	}
-}

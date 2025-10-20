@@ -59,6 +59,17 @@ spec:
             - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_ROBOT
               value: {{ join "," .Values.discovery.attributes.excludes.robot | quote }}
             {{- end }}
+            {{- /* RabbitMQ management endpoints JSON from Secret or values */}}
+            {{- if .Values.rabbitmq.auth.secretName }}
+            - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.auth.secretName }}
+                  key: {{ default "managementEndpointsJson" .Values.rabbitmq.auth.secretKey }}
+            {{- else if .Values.rabbitmq.auth.managementEndpoints }}
+            - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+              value: {{ .Values.rabbitmq.auth.managementEndpoints | toJson | quote }}
+            {{- end }}
             {{- include "extensionlib.deployment.env" (list .) | nindent 12 }}
             {{- with .Values.extraEnv }}
               {{- toYaml . | nindent 12 }}

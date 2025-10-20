@@ -1,6 +1,32 @@
 # Default values for steadybit-extension-rabbitmq.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+# RabbitMQ connectivity configuration
+rabbitmq:
+  auth:
+    # rabbitmq.auth.secretName -- Name of an existing Secret that contains a key with the JSON array
+    # of management endpoints. If set, this takes precedence over inline `managementEndpoints`.
+    # The secret key defaults to `managementEndpointsJson` (see `rabbitmq.auth.secretKey`).
+    secretName: null
+
+    # rabbitmq.auth.secretKey -- Key in the Secret that stores the JSON array
+    # e.g., [{"url":"https://...","username":"...","password":"...","amqp":{"url":"amqps://...","vhost":"/","insecureSkipVerify":false}}]
+    secretKey: managementEndpointsJson
+
+    # rabbitmq.auth.managementEndpoints -- Inline configuration for management endpoints.
+    # Used when `secretName` is not set. This mirrors the Go config structure.
+    managementEndpoints: []
+    # managementEndpoints:
+    #   - url: "http://my-rabbitmq.default.svc.cluster.local:15672"
+    #     username: "user"
+    #     password: "bitnami"
+    #     insecureSkipVerify: false
+    #     amqp:
+    #       url: "amqp://my-rabbitmq.default.svc.cluster.local:5672/"
+    #       vhost: "/"
+    #       insecureSkipVerify: false
+
+
 image:
   # image.name -- The container image to use for the Steadybit Rabbitmq extension.
   name: ghcr.io/steadybit/extension-rabbitmq
@@ -133,3 +159,6 @@ discovery:
     excludes:
       # discovery.attributes.excludes.robot -- List of attributes to exclude from Robot discovery.
       robot: []
+
+
+

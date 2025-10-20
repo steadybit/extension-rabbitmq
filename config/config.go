@@ -21,7 +21,7 @@ type AMQPOptions struct {
 	CAFile             string `json:"caFile,omitempty"`
 }
 
-// Specification is the configuration specification for the extension. Configuration values can be applied
+// ManagementEndpoint is the configuration specification for the extension. Configuration values can be applied
 // through environment variables. Learn more through the documentation of the envconfig package.
 // https://github.com/kelseyhightower/envconfig
 type ManagementEndpoint struct {

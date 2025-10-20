@@ -27,16 +27,11 @@ func TestWithMinikube(t *testing.T) {
 		Port: 8080,
 		ExtraArgs: func(m *e2e.Minikube) []string {
 			// Management over HTTP 15672; AMQP 5672; vhost "/"
-			endpointsJSON := `[{
-			  "url":"http://my-rabbitmq.default.svc.cluster.local:15672",
-			  "username":"user",
-			  "password":"bitnami",
-			  "amqp":{"url":"amqp://my-rabbitmq.default.svc.cluster.local:5672/","vhost":"/"}
-			}]`
+			endpointsJSON := `[{"url":"http://my-rabbitmq.default.svc.cluster.local:15672","username":"user","password":"bitnami","amqp":{"url":"amqp://my-rabbitmq.default.svc.cluster.local:5672/","vhost":"/"}}]`
 			return []string{
 				"--set", "logging.level=debug",
 				"--set", "env[0].name=STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON",
-				"--set", "env[0].value=" + endpointsJSON,
+				"--set-json", "env[0].value=" + endpointsJSON,
 			}
 		},
 	}
@@ -175,5 +170,33 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 	// Optionally wait for management to be ready by probing the service DNS from within the cluster,
 	// but the Helm --wait is typically enough for the statefulset and service readiness.
 	_ = os.Setenv("RABBITMQ_SERVICE", "my-rabbitmq.default.svc.cluster.local")
+	// Create vhost and queue via management API from inside the pod
+	if err := ensureRabbitMQTopology(minikube, "default", "my-rabbitmq-0", "user", "bitnami", "order", "order"); err != nil {
+		return fmt.Errorf("failed to create vhost/queue: %w", err)
+	}
 	return nil
+}
+
+func ensureRabbitMQTopology(minikube *e2e.Minikube, ns, pod, user, pass, vhost, queue string) error {
+	// Retry loop because management may need a few seconds even after --wait
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		cmd := exec.Command(
+			"kubectl", "--context", minikube.Profile, "-n", ns, "exec", pod, "--", "bash", "-ceu",
+			fmt.Sprintf(`
+set -o pipefail
+curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/vhosts/%s >/dev/null
+curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/permissions/%s/%s -d '{"configure":".*","write":".*","read":".*"}' >/dev/null
+curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/queues/%s/%s -d '{"durable":true}' >/dev/null
+`, user, pass, vhost, user, pass, vhost, user, user, pass, vhost, queue),
+		)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("kubectl exec failed: %v: %s", err, string(out))
+		}
+		time.Sleep(5 * time.Second)
+	}
 }

@@ -26,7 +26,7 @@ var (
 	pool   = map[string]*EndpointClients{} // key: mgmt URL
 )
 
-// Call once at startup after config.ParseConfiguration().
+// Init Call once at startup after config.ParseConfiguration().
 func Init() error {
 	var initErr error
 	once.Do(func() {
@@ -48,7 +48,7 @@ func Init() error {
 	return initErr
 }
 
-// Get by management URL.
+// GetByMgmtURL Get by management URL.
 func GetByMgmtURL(mgmtURL string) (*EndpointClients, bool) {
 	poolMu.RLock()
 	defer poolMu.RUnlock()
@@ -56,7 +56,7 @@ func GetByMgmtURL(mgmtURL string) (*EndpointClients, bool) {
 	return c, ok
 }
 
-// Get by AMQP URL.
+// GetByAMQPURL Get by AMQP URL.
 func GetByAMQPURL(amqpURL string) (*EndpointClients, bool) {
 	poolMu.RLock()
 	defer poolMu.RUnlock()

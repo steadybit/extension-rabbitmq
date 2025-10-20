@@ -5,9 +5,9 @@ manifest should match snapshot with TLS:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8080,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
         steadybit.com/extension-auto-registration: |
-          {"extensions":[{"port":8080,"protocol":"https"}]}
+          {"extensions":[{"port":8083,"protocol":"https"}]}
       labels: null
       name: RELEASE-NAME-steadybit-extension-rabbitmq
       namespace: NAMESPACE
@@ -15,9 +15,9 @@ manifest should match snapshot with TLS:
       ports:
         - appProtocol: tcp
           name: tcp-app
-          port: 8080
+          port: 8083
           protocol: TCP
-          targetPort: 8080
+          targetPort: 8083
       selector:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/name: steadybit-extension-rabbitmq
@@ -28,9 +28,9 @@ manifest should match snapshot with mutual TLS:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8080,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
         steadybit.com/extension-auto-registration: |
-          {"extensions":[{"port":8080,"protocol":"https"}]}
+          {"extensions":[{"port":8083,"protocol":"https"}]}
       labels: null
       name: RELEASE-NAME-steadybit-extension-rabbitmq
       namespace: NAMESPACE
@@ -38,9 +38,9 @@ manifest should match snapshot with mutual TLS:
       ports:
         - appProtocol: tcp
           name: tcp-app
-          port: 8080
+          port: 8083
           protocol: TCP
-          targetPort: 8080
+          targetPort: 8083
       selector:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/name: steadybit-extension-rabbitmq
@@ -51,9 +51,9 @@ manifest should match snapshot with mutual TLS using containerPaths:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8080,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
         steadybit.com/extension-auto-registration: |
-          {"extensions":[{"port":8080,"protocol":"https"}]}
+          {"extensions":[{"port":8083,"protocol":"https"}]}
       labels: null
       name: RELEASE-NAME-steadybit-extension-rabbitmq
       namespace: NAMESPACE
@@ -61,9 +61,9 @@ manifest should match snapshot with mutual TLS using containerPaths:
       ports:
         - appProtocol: tcp
           name: tcp-app
-          port: 8080
+          port: 8083
           protocol: TCP
-          targetPort: 8080
+          targetPort: 8083
       selector:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/name: steadybit-extension-rabbitmq
@@ -74,9 +74,9 @@ manifest should match snapshot without TLS:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8080,"protocol":"http","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"http","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
         steadybit.com/extension-auto-registration: |
-          {"extensions":[{"port":8080,"protocol":"http"}]}
+          {"extensions":[{"port":8083,"protocol":"http"}]}
       labels: null
       name: RELEASE-NAME-steadybit-extension-rabbitmq
       namespace: NAMESPACE
@@ -84,9 +84,9 @@ manifest should match snapshot without TLS:
       ports:
         - appProtocol: tcp
           name: tcp-app
-          port: 8080
+          port: 8083
           protocol: TCP
-          targetPort: 8080
+          targetPort: 8083
       selector:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/name: steadybit-extension-rabbitmq

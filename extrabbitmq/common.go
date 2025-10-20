@@ -139,7 +139,6 @@ func createNewManagementClient(host string, insecureSkipVerify bool, caFile stri
 			password = pw
 		}
 		u.User = nil
-		host = u.String()
 	}
 	for i := range config.Config.ManagementEndpoints {
 		ep := &config.Config.ManagementEndpoints[i]
