@@ -1,47 +1,52 @@
 # Steadybit extension-rabbitmq
 
-TODO describe what your extension is doing here from a user perspective.
+A [Steadybit](https://www.steadybit.com/) extension to integrate [Rabbitmq](https://www.rabbitmq.com/) into Steadybit.
 
-TODO optionally add your extension to the [Reliability Hub](https://hub.steadybit.com/) by creating
-a [pull request](https://github.com/steadybit/reliability-hub-db) and add a link to this README.
+Learn about the capabilities of this extension in
+our [Reliability Hub](https://hub.steadybit.com/extension/com.steadybit.extension_rabbitmq).
+
+## Prerequisites
+
+The extension-rabbitmq is using these capacities through management endpoint and ampq endpoint, thus may need elevated rights on rabbitmq side :
+
+- List Queues
+- Get Queue Metrics
+- List Vhosts
+- List Nodes
+- Publish Messages
+- Create / Delete Policies
 
 ## Configuration
 
-| Environment Variable                                      | Helm value                           | Meaning                                                                                                               | Required | Default                 |
-|-----------------------------------------------------------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------|----------|-------------------------|
-| `STEADYBIT_EXTENSION_ROBOT_NAMES`                         |                                      | Comma-separated list of discoverable robots                                                                           | yes      | Bender,Terminator,R2-D2 |
-| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_ROBOT` | `discovery.attributes.excludes.robot | List of Robot Attributes which will be excluded during discovery. Checked by key equality and supporting trailing "*" | no       |                         |
+| Environment Variable                                       | Helm value                                 | Meaning                                                                                                                                                                                               | Required | Default |
+|------------------------------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
+| `STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON`            | `rabbitmq.managementEndpoints`             | JSON array describing all RabbitMQ clusters and their management and AMQP endpoints. Each object must include `url`, `username`, `password`, and an `amqp` object with its own connection parameters. | yes      |         |
+|                                                            |                                            | Example:<br>`[{"url":"https://mq-0.ns.svc:15672","username":"admin","password":"s3cr3t","amqp":{"url":"amqps://mq-0.ns.svc:5671","vhost":"/","insecureSkipVerify":false}}]`                           |          |         | | no       |         |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_RABBIT_BROKER`     | `discovery.interval.rabbitBroker`          | Interval (in seconds) for discovering RabbitMQ cluster nodes.                                                                                                                                         | no       | `30`    |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_RABBIT_VHOST`      | `discovery.interval.rabbitVhost`           | Interval (in seconds) for discovering RabbitMQ vhosts.                                                                                                                                                | no       | `30`    |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_RABBIT_QUEUE`      | `discovery.interval.rabbitQueue`           | Interval (in seconds) for discovering RabbitMQ queues.                                                                                                                                                | no       | `30`    |
+| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_VHOSTS` | `discovery.attributes.excludes.vhost`      | List of Vhost attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
+| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES` | `discovery.attributes.excludes.queue`      | List of Queue attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
 
-The extension supports all environment variables provided by [steadybit/extension-kit](https://github.com/steadybit/extension-kit#environment-variables).
+The extension supports all environment variables provided
+by [steadybit/extension-kit](https://github.com/steadybit/extension-kit#environment-variables).
 
 ## Installation
 
-### Kubernetes
+### Using Docker
 
-Detailed information about agent and extension installation in kubernetes can also be found in
-our [documentation](https://docs.steadybit.com/install-and-configure/install-agent/install-on-kubernetes).
-
-#### Recommended (via agent helm chart)
-
-All extensions provide a helm chart that is also integrated in the
-[helm-chart](https://github.com/steadybit/helm-charts/tree/main/charts/steadybit-agent) of the agent.
-
-You must provide additional values to activate this extension.
-
-```
---set extension-rabbitmq.enabled=true \
+```sh
+docker run \
+  --rm \
+  -p 8083 \
+  --name steadybit-extension-rabbitmq \
+  --env STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON='[{"url":"http://localhost:15672","username":"guest","password":"guest","amqp":{"url":"amqp://localhost:5672","vhost":"/"}}]' \
+  ghcr.io/steadybit/extension-rabbitmq:latest
 ```
 
-Additional configuration options can be found in
-the [helm-chart](https://github.com/steadybit/extension-rabbitmq/blob/main/charts/steadybit-extension-rabbitmq/values.yaml) of the
-extension.
+### Using Helm in Kubernetes
 
-#### Alternative (via own helm chart)
-
-If you need more control, you can install the extension via its
-dedicated [helm-chart](https://github.com/steadybit/extension-rabbitmq/blob/main/charts/steadybit-extension-rabbitmq).
-
-```bash
+```sh
 helm repo add steadybit-extension-rabbitmq https://steadybit.github.io/extension-rabbitmq
 helm repo update
 helm upgrade steadybit-extension-rabbitmq \
@@ -50,27 +55,22 @@ helm upgrade steadybit-extension-rabbitmq \
     --timeout 5m0s \
     --create-namespace \
     --namespace steadybit-agent \
-    steadybit-extension-rabbitmq/steadybit-extension-rabbitmq
+    --set kafka.seedBrokers="localhost:9092" \
+    steadybit-extension-kafka/steadybit-extension-rabbitmq
 ```
 
-### Linux Package
+## Register the extension
 
-Please use
-our [agent-linux.sh script](https://docs.steadybit.com/install-and-configure/install-agent/install-on-linux-hosts)
-to install the extension on your Linux machine. The script will download the latest version of the extension and install
-it using the package manager.
+Make sure to register the extension on the Steadybit platform. Please refer to
+the [documentation](https://docs.steadybit.com/integrate-with-steadybit/extensions/extension-installation) for more
+information.
 
-After installing, configure the extension by editing `/etc/steadybit/extension-rabbitmq` and then restart the service.
-
-## Extension registration
-
-Make sure that the extension is registered with the agent. In most cases this is done automatically. Please refer to
-the [documentation](https://docs.steadybit.com/install-and-configure/install-agent/extension-registration) for more
-information about extension registration and how to verify.
+---
 
 ## Version and Revision
 
 The version and revision of the extension:
+
 - are printed during the startup of the extension
 - are added as a Docker label to the image
 - are available via the `version.txt`/`revision.txt` files in the root of the image
