@@ -152,26 +152,3 @@ func resolveAMQPURLForClient(mgmtEndpoint string) string {
 	}
 	return ""
 }
-
-//func getQueueBoundExchanges(client *rabbithole.Client, vhost, queue string) []string {
-//	bindings, err := client.ListQueueBindings(vhost, queue)
-//	if err != nil {
-//		log.Warn().Err(err).Str("vhost", vhost).Str("queue", queue).Msg("failed to list queue bindings")
-//		return nil
-//	}
-//	// Collect unique sources (exchanges) for this queue
-//	set := make(map[string]struct{})
-//	for _, b := range bindings {
-//		if b.Source != "" { // source is the exchange name
-//			set[b.Source] = struct{}{}
-//		}
-//	}
-//	if len(set) == 0 {
-//		return nil
-//	}
-//	out := make([]string, 0, len(set))
-//	for s := range set {
-//		out = append(out, s)
-//	}
-//	return out
-//}
