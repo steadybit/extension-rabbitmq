@@ -32,7 +32,7 @@ func (a *produceRabbitPeriodicallyAction) NewEmptyState() ProduceMessageAttackSt
 
 func (a *produceRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
-		Id:          "com.steadybit.extension_rabbitmq.rabbitmq-queue.produce-fixed-amount",
+		Id:          "com.steadybit.extension_rabbitmq.rabbitmq-queue.produce-periodically",
 		Label:       "RabbitMQ: Produce (# of Messages)",
 		Description: "Publish a fixed number of messages to an exchange using the Management API.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
