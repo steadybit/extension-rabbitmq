@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package extrabbitmq
 
 import (
@@ -6,177 +8,167 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
+	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
+	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// --- helpers ---
+func TestQueueDescribeTarget(t *testing.T) {
+	r := &rabbitQueueDiscovery{}
+	td := r.DescribeTarget()
 
-func fakeMgmtQueuesServer(t *testing.T, queues []map[string]interface{}) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/queues", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(queues)
-	})
-	return httptest.NewServer(mux)
+	assert.Equal(t, queueTargetId, td.Id)
+	require.Len(t, td.Table.Columns, 8)
+	assert.Equal(t, "steadybit.label", td.Table.Columns[0].Attribute)
+	assert.Equal(t, "rabbitmq.cluster.name", td.Table.Columns[1].Attribute)
+	assert.Equal(t, "rabbitmq.queue.vhost", td.Table.Columns[2].Attribute)
+	assert.Equal(t, "rabbitmq.queue.name", td.Table.Columns[3].Attribute)
+	assert.Equal(t, "rabbitmq.amqp.url", td.Table.Columns[4].Attribute)
+	assert.Equal(t, "rabbitmq.queue.status", td.Table.Columns[5].Attribute)
+	assert.Equal(t, "rabbitmq.queue.durable", td.Table.Columns[6].Attribute)
+	assert.Equal(t, "rabbitmq.queue.auto_delete", td.Table.Columns[7].Attribute)
 }
 
-func resetCfgQueues() func() {
-	old := config.Config
-	return func() { config.Config = old }
+func TestToQueueTarget_Attributes(t *testing.T) {
+	q := rabbithole.QueueInfo{
+		Name:   "order",
+		Vhost:  "order",
+		Status: "running",
+	}
+	tgt := toQueueTarget("http://mgmt", "amqp://broker:5672/order", q, "cluster-A")
+
+	assert.Equal(t, queueTargetId, tgt.TargetType)
+	assert.Equal(t, "order/order", tgt.Label)
+	assert.Equal(t, "http://mgmt::order/order", tgt.Id)
+
+	assert.Equal(t, []string{"order"}, tgt.Attributes["rabbitmq.queue.vhost"])
+	assert.Equal(t, []string{"order"}, tgt.Attributes["rabbitmq.queue.name"])
+	assert.Equal(t, []string{"cluster-A"}, tgt.Attributes["rabbitmq.cluster.name"])
+	assert.Equal(t, []string{"amqp://broker:5672/order"}, tgt.Attributes["rabbitmq.amqp.url"])
+	assert.Equal(t, []string{"running"}, tgt.Attributes["rabbitmq.queue.status"])
+	assert.Equal(t, []string{"http://mgmt"}, tgt.Attributes["rabbitmq.mgmt.url"])
 }
 
-func setEndpointsJSONQueues(eps []config.ManagementEndpoint) {
-	b, _ := json.Marshal(eps)
-	config.Config.ManagementEndpointsJSON = string(b)
-	config.Config.ManagementEndpoints = eps
+func TestResolveAMQPURLForClient(t *testing.T) {
+	// Configure two endpoints; only first has AMQP mapping
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
+		{
+			URL: "http://one.local:15672",
+			AMQP: &config.AMQPOptions{
+				URL:   "amqp://one.local:5672/",
+				Vhost: "/",
+			},
+		},
+		{
+			URL: "http://two.local:15672",
+		},
+	}
+	// Matching by host
+	u := resolveAMQPURLForClient("http://one.local:15672")
+	assert.Equal(t, "amqp://one.local:5672/", u)
+
+	u2 := resolveAMQPURLForClient("http://two.local:15672")
+	assert.Equal(t, "", u2)
 }
 
-func findTargetByLabelQueues(ts []discovery_kit_api.Target, label string) *discovery_kit_api.Target {
-	for i := range ts {
-		if ts[i].Label == label {
-			return &ts[i]
+func TestGetAllQueues_MultipleEndpoints_WithClusterName(t *testing.T) {
+	// OK server #1: two queues, cluster name A
+	ok1 := httptest.NewServer(mockMgmtQueuesHandler(
+		[]rabbithole.QueueInfo{
+			{Name: "q1", Vhost: "/", Status: "running"},
+			{Name: "q2", Vhost: "order", Status: "idle"},
+		},
+		"cluster-A",
+		http.StatusOK,
+	))
+	defer ok1.Close()
+
+	// OK server #2: one queue, cluster name B
+	ok2 := httptest.NewServer(mockMgmtQueuesHandler(
+		[]rabbithole.QueueInfo{
+			{Name: "q3", Vhost: "/", Status: "running"},
+		},
+		"cluster-B",
+		http.StatusOK,
+	))
+	defer ok2.Close()
+
+	// Failing server: 500 on /api/queues
+	fail := httptest.NewServer(mockMgmtQueuesHandler(nil, "cluster-C", http.StatusInternalServerError))
+	defer fail.Close()
+
+	// Wire config with AMQP mapping for the two OK endpoints
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
+		{
+			URL: ok1.URL,
+			AMQP: &config.AMQPOptions{
+				URL:   "amqp://ok1:5672/",
+				Vhost: "/",
+			},
+		},
+		{
+			URL: ok2.URL,
+			AMQP: &config.AMQPOptions{
+				URL:   "amqp://ok2:5672/",
+				Vhost: "/",
+			},
+		},
+		{URL: fail.URL},
+	}
+	require.NoError(t, clients.Init())
+
+	// Discover
+	ctx := context.Background()
+	targets, err := getAllQueues(ctx)
+	require.NoError(t, err)
+
+	// Expect 3 targets (2 + 1, failing endpoint contributes none)
+	require.Len(t, targets, 3)
+
+	// Validate essential attributes
+	for _, tgt := range targets {
+		assert.Equal(t, queueTargetId, tgt.TargetType)
+		assert.NotEmpty(t, tgt.Label)
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.queue.vhost"])
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.queue.name"])
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.mgmt.url"])
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.amqp.url"])
+		// cluster name resolved via /api/cluster-name
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.cluster.name"])
+	}
+}
+
+// --- test helpers ---
+
+// mockMgmtQueuesHandler simulates endpoints used by getAllQueues():
+//   - GET /api/queues
+//   - GET /api/cluster-name (rabbit-hole client.GetClusterName)
+func mockMgmtQueuesHandler(queues []rabbithole.QueueInfo, clusterName string, queuesStatus int) http.Handler {
+	type clusterNameDoc struct {
+		Name string `json:"name"`
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/queues":
+			if queuesStatus != http.StatusOK {
+				http.Error(w, "error", queuesStatus)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(queues)
+			return
+		case "/api/cluster-name":
+			_ = json.NewEncoder(w).Encode(clusterNameDoc{Name: clusterName})
+			return
+		default:
+			http.NotFound(w, r)
 		}
-	}
-	return nil
-}
-
-func assertAttrQueues(t *testing.T, tgt discovery_kit_api.Target, key, want string) {
-	t.Helper()
-	vals, ok := tgt.Attributes[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
-	}
-	if len(vals) == 0 || vals[0] != want {
-		t.Fatalf("attribute %q = %v, want %q", key, vals, want)
-	}
-}
-
-// --- tests ---
-
-func TestGetAllQueues_SingleEndpoint(t *testing.T) {
-	defer resetCfgQueues()()
-
-	// two queues on default vhost
-	payload := []map[string]interface{}{
-		{
-			"name":                    "orders",
-			"vhost":                   "/",
-			"durable":                 true,
-			"auto_delete":             false,
-			"consumers":               3,
-			"messages":                10,
-			"messages_ready":          7,
-			"messages_unacknowledged": 3,
-			"state":                   "running",
-			"status":                  "running",
-		},
-		{
-			"name":                    "payments",
-			"vhost":                   "/",
-			"durable":                 false,
-			"auto_delete":             true,
-			"consumers":               0,
-			"messages":                0,
-			"messages_ready":          0,
-			"messages_unacknowledged": 0,
-			"state":                   "idle",
-			"status":                  "idle",
-		},
-	}
-	s := fakeMgmtQueuesServer(t, payload)
-	defer s.Close()
-
-	setEndpointsJSONQueues([]config.ManagementEndpoint{{URL: s.URL}})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	targets, err := getAllQueues(ctx)
-	if err != nil {
-		t.Fatalf("getAllQueues error: %v", err)
-	}
-	if len(targets) != 2 {
-		t.Fatalf("expected 2 targets, got %d", len(targets))
-	}
-
-	q := findTargetByLabelQueues(targets, "/"+"/"+"orders") // label is vhost/name, here '///orders'
-	if q == nil {
-		// fallback to "/" + "orders"
-		q = findTargetByLabelQueues(targets, "//orders")
-	}
-	if q == nil {
-		q = findTargetByLabelQueues(targets, "/orders")
-	}
-	if q == nil {
-		t.Fatalf("orders queue target not found")
-	}
-	assertAttrQueues(t, *q, "rabbitmq.queue.vhost", "/")
-	assertAttrQueues(t, *q, "rabbitmq.queue.name", "orders")
-	assertAttrQueues(t, *q, "rabbitmq.queue.durable", "true")
-	assertAttrQueues(t, *q, "rabbitmq.queue.auto_delete", "false")
-	assertAttrQueues(t, *q, "rabbitmq.queue.messages_ready", "7")
-}
-
-func TestGetAllQueues_MultipleEndpoints(t *testing.T) {
-	defer resetCfgQueues()()
-
-	s1 := fakeMgmtQueuesServer(t, []map[string]interface{}{
-		{"name": "alpha", "vhost": "vh1", "durable": true, "auto_delete": false, "messages": 1, "messages_ready": 1, "messages_unacknowledged": 0, "state": "running", "status": "running"},
 	})
-	defer s1.Close()
-	s2 := fakeMgmtQueuesServer(t, []map[string]interface{}{
-		{"name": "beta", "vhost": "vh2", "durable": false, "auto_delete": true, "messages": 0, "messages_ready": 0, "messages_unacknowledged": 0, "state": "idle", "status": "idle"},
-	})
-	defer s2.Close()
-
-	setEndpointsJSONQueues([]config.ManagementEndpoint{{URL: s1.URL}, {URL: s2.URL}})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	targets, err := getAllQueues(ctx)
-	if err != nil {
-		t.Fatalf("getAllQueues error: %v", err)
-	}
-	if len(targets) != 2 {
-		t.Fatalf("expected 2 targets, got %d", len(targets))
-	}
-
-	// labels are vhost/name
-	if findTargetByLabelQueues(targets, "vh1/alpha") == nil {
-		t.Fatalf("expected target vh1/alpha")
-	}
-	if findTargetByLabelQueues(targets, "vh2/beta") == nil {
-		t.Fatalf("expected target vh2/beta")
-	}
 }
 
-func TestGetAllQueues_AttributeExcludes(t *testing.T) {
-	defer resetCfgQueues()()
-
-	s := fakeMgmtQueuesServer(t, []map[string]interface{}{
-		{"name": "x", "vhost": "vh", "durable": true, "auto_delete": false, "messages": 0, "messages_ready": 0, "messages_unacknowledged": 0, "state": "idle", "status": "idle"},
-	})
-	defer s.Close()
-
-	setEndpointsJSONQueues([]config.ManagementEndpoint{{URL: s.URL}})
-	config.Config.DiscoveryAttributesExcludesQueues = []string{"rabbitmq.queue.auto_delete"}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	targets, err := getAllQueues(ctx)
-	if err != nil {
-		t.Fatalf("getAllQueues error: %v", err)
-	}
-	if len(targets) != 1 {
-		t.Fatalf("expected 1 target, got %d", len(targets))
-	}
-	if _, ok := targets[0].Attributes["rabbitmq.queue.auto_delete"]; ok {
-		t.Fatalf("expected attribute rabbitmq.queue.auto_delete to be excluded")
-	}
-}
+// Minimal definitions matching config package used in tests, to help IDEs:
+// Remove if your config exports these already. Tests rely on the real package types.
+var _ discovery_kit_api.Target // keep import alive

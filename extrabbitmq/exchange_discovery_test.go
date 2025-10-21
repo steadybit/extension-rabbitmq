@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package extrabbitmq
 
 import (
@@ -8,127 +10,114 @@ import (
 	"testing"
 	"time"
 
-	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
+	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
+	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// --- helpers ---
+func TestExchangeDescribeTarget(t *testing.T) {
+	r := &rabbitExchangeDiscovery{}
+	td := r.DescribeTarget()
 
-type exch struct {
-	Name       string `json:"name"`
-	Vhost      string `json:"vhost"`
-	Type       string `json:"type"`
-	Durable    bool   `json:"durable"`
-	AutoDelete bool   `json:"auto_delete"`
-	Internal   bool   `json:"internal"`
+	assert.Equal(t, exchangeTargetId, td.Id)
+	require.Len(t, td.Table.Columns, 7)
+	assert.Equal(t, "steadybit.label", td.Table.Columns[0].Attribute)
+	assert.Equal(t, "rabbitmq.exchange.vhost", td.Table.Columns[1].Attribute)
+	assert.Equal(t, "rabbitmq.exchange.name", td.Table.Columns[2].Attribute)
+	assert.Equal(t, "rabbitmq.exchange.type", td.Table.Columns[3].Attribute)
+	assert.Equal(t, "rabbitmq.exchange.durable", td.Table.Columns[4].Attribute)
+	assert.Equal(t, "rabbitmq.exchange.auto_delete", td.Table.Columns[5].Attribute)
+	assert.Equal(t, "rabbitmq.exchange.internal", td.Table.Columns[6].Attribute)
 }
 
-func fakeMgmtExchangesServer(t *testing.T, exchanges []exch) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/exchanges", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+func TestToExchangeTarget_Attributes(t *testing.T) {
+	ex := rabbithole.ExchangeInfo{
+		Name:       "amq.direct",
+		Vhost:      "/",
+		Type:       "direct",
+		Durable:    true,
+		AutoDelete: false,
+		Internal:   false,
+	}
+	tgt := toExchangeTarget("http://mgmt", ex)
+
+	assert.Equal(t, exchangeTargetId, tgt.TargetType)
+	assert.Equal(t, "//amq.direct", tgt.Label)
+	assert.Equal(t, "http://mgmt:://amq.direct", tgt.Id)
+
+	assert.Equal(t, []string{"/"}, tgt.Attributes["rabbitmq.exchange.vhost"])
+	assert.Equal(t, []string{"amq.direct"}, tgt.Attributes["rabbitmq.exchange.name"])
+	assert.Equal(t, []string{"direct"}, tgt.Attributes["rabbitmq.exchange.type"])
+	assert.Equal(t, []string{"true"}, tgt.Attributes["rabbitmq.exchange.durable"])
+	assert.Equal(t, []string{"false"}, tgt.Attributes["rabbitmq.exchange.auto_delete"])
+	assert.Equal(t, []string{"false"}, tgt.Attributes["rabbitmq.exchange.internal"])
+}
+
+func TestGetAllExchanges_MultipleEndpoints_WithOneFailing(t *testing.T) {
+	// OK server with two exchanges
+	ok1 := httptest.NewServer(mockMgmtExchangesHandler([]rabbithole.ExchangeInfo{
+		{Name: "ex-a", Vhost: "/", Type: "direct", Durable: true},
+		{Name: "ex-b", Vhost: "order", Type: "topic", Durable: false, AutoDelete: true, Internal: false},
+	}, http.StatusOK))
+	defer ok1.Close()
+
+	// OK server with one exchange
+	ok2 := httptest.NewServer(mockMgmtExchangesHandler([]rabbithole.ExchangeInfo{
+		{Name: "ex-c", Vhost: "/", Type: "fanout", Durable: true},
+	}, http.StatusOK))
+	defer ok2.Close()
+
+	// Failing server
+	fail := httptest.NewServer(mockMgmtExchangesHandler(nil, http.StatusInternalServerError))
+	defer fail.Close()
+
+	// Configure endpoints
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
+		{URL: ok1.URL},
+		{URL: ok2.URL},
+		{URL: fail.URL},
+	}
+	// Keep JSON in sync if other logic inspects it
+	setEndpointsJSON(config.Config.ManagementEndpoints)
+
+	// Initialize pooled management clients
+	require.NoError(t, clients.Init())
+
+	// Discover
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	targets, err := getAllExchanges(ctx)
+	require.NoError(t, err)
+	require.Len(t, targets, 3)
+
+	// Basic attribute sanity on all targets
+	for _, tgt := range targets {
+		assert.Equal(t, exchangeTargetId, tgt.TargetType)
+		assert.NotEmpty(t, tgt.Label)
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.exchange.vhost"])
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.exchange.name"])
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.exchange.type"])
+		assert.NotEmpty(t, tgt.Attributes["rabbitmq.exchange.durable"])
+	}
+}
+
+// --- test helpers ---
+
+// mockMgmtExchangesHandler simulates the RabbitMQ Management API endpoint used by ListExchanges():
+//   - GET /api/exchanges
+func mockMgmtExchangesHandler(exchanges []rabbithole.ExchangeInfo, status int) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/exchanges" {
+			http.NotFound(w, r)
+			return
+		}
+		if status != http.StatusOK {
+			http.Error(w, "error", status)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(exchanges)
 	})
-	return httptest.NewServer(mux)
-}
-
-func resetCfgExchanges() func() {
-	old := config.Config
-	return func() { config.Config = old }
-}
-
-func setEndpointsJSONExchanges(eps []config.ManagementEndpoint) {
-	b, _ := json.Marshal(eps)
-	config.Config.ManagementEndpointsJSON = string(b)
-	config.Config.ManagementEndpoints = eps
-}
-
-func findTargetByLabelExchanges(ts []discovery_kit_api.Target, label string) *discovery_kit_api.Target {
-	for i := range ts {
-		if ts[i].Label == label {
-			return &ts[i]
-		}
-	}
-	return nil
-}
-
-func assertAttrExchanges(t *testing.T, tgt discovery_kit_api.Target, key, want string) {
-	t.Helper()
-	vals, ok := tgt.Attributes[key]
-	if !ok {
-		t.Fatalf("attribute %q missing", key)
-	}
-	if len(vals) == 0 || vals[0] != want {
-		t.Fatalf("attribute %q = %v, want %q", key, vals, want)
-	}
-}
-
-// --- tests ---
-
-func TestGetAllExchanges_SingleEndpoint(t *testing.T) {
-	defer resetCfgExchanges()()
-
-	s := fakeMgmtExchangesServer(t, []exch{
-		{Name: "amq.direct", Vhost: "/", Type: "direct", Durable: true, AutoDelete: false, Internal: false},
-		{Name: "events", Vhost: "vh1", Type: "topic", Durable: true, AutoDelete: false, Internal: false},
-	})
-	defer s.Close()
-
-	setEndpointsJSONExchanges([]config.ManagementEndpoint{{URL: s.URL}})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	targets, err := getAllExchanges(ctx)
-	if err != nil {
-		t.Fatalf("getAllExchanges error: %v", err)
-	}
-	if len(targets) != 2 {
-		t.Fatalf("expected 2 targets, got %d", len(targets))
-	}
-
-	ev := findTargetByLabelExchanges(targets, "vh1/events")
-	if ev == nil {
-		t.Fatalf("target vh1/events not found")
-	}
-	assertAttrExchanges(t, *ev, "rabbitmq.exchange.vhost", "vh1")
-	assertAttrExchanges(t, *ev, "rabbitmq.exchange.name", "events")
-	assertAttrExchanges(t, *ev, "rabbitmq.exchange.type", "topic")
-	assertAttrExchanges(t, *ev, "rabbitmq.exchange.durable", "true")
-	assertAttrExchanges(t, *ev, "rabbitmq.exchange.auto_delete", "false")
-	assertAttrExchanges(t, *ev, "rabbitmq.exchange.internal", "false")
-}
-
-func TestGetAllExchanges_MultipleEndpoints(t *testing.T) {
-	defer resetCfgExchanges()()
-
-	s1 := fakeMgmtExchangesServer(t, []exch{
-		{Name: "ex1", Vhost: "a", Type: "fanout", Durable: false, AutoDelete: true, Internal: false},
-	})
-	defer s1.Close()
-	s2 := fakeMgmtExchangesServer(t, []exch{
-		{Name: "ex2", Vhost: "b", Type: "headers", Durable: true, AutoDelete: false, Internal: true},
-	})
-	defer s2.Close()
-
-	setEndpointsJSONExchanges([]config.ManagementEndpoint{{URL: s1.URL}, {URL: s2.URL}})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	targets, err := getAllExchanges(ctx)
-	if err != nil {
-		t.Fatalf("getAllExchanges error: %v", err)
-	}
-	if len(targets) != 2 {
-		t.Fatalf("expected 2 targets, got %d", len(targets))
-	}
-
-	if findTargetByLabelExchanges(targets, "a/ex1") == nil {
-		t.Fatalf("expected target a/ex1")
-	}
-	if findTargetByLabelExchanges(targets, "b/ex2") == nil {
-		t.Fatalf("expected target b/ex2")
-	}
 }
