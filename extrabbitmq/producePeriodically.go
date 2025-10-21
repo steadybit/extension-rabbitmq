@@ -32,9 +32,9 @@ func (a *produceRabbitPeriodicallyAction) NewEmptyState() ProduceMessageAttackSt
 
 func (a *produceRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
-		Id:          "com.steadybit.extension_rabbitmq.rabbitmq-queue.produce-periodically",
-		Label:       "RabbitMQ: Produce (# of Messages)",
-		Description: "Publish a fixed number of messages to an exchange using the Management API.",
+		Id:          "com.steadybit.extension_rabbitmq.queue.produce-periodically",
+		Label:       "Produce (Messages / s)",
+		Description: "Publish X messages per second for a given duration.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        extutil.Ptr(rabbitMQIcon),
 		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
@@ -43,9 +43,8 @@ func (a *produceRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 		Technology:  extutil.Ptr("RabbitMQ"),
 		Category:    extutil.Ptr("RabbitMQ"),
 		Kind:        action_kit_api.Attack,
-		TimeControl: action_kit_api.TimeControlInternal,
+		TimeControl: action_kit_api.TimeControlExternal,
 		Parameters: []action_kit_api.ActionParameter{
-			vhost,
 			exchange,
 			routingKey,
 			headers,
@@ -88,8 +87,7 @@ func getDelayBetweenRequestsInMsPeriodically(recordsPerSecond int64) uint64 {
 // Prepare validates request and sets up state. It defers to shared prepare helpers where available.
 func (a *produceRabbitPeriodicallyAction) Prepare(ctx context.Context, state *ProduceMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
 	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsPeriodically(extutil.ToInt64(request.Config["messagesPerSecond"]))
-	// reuse existing prepare if present in project
-	return prepare(request, state, checkEndedProduceRabbitFixedAmount)
+	return prepare(request, state, func(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool { return false })
 }
 
 func (a *produceRabbitPeriodicallyAction) Start(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StartResult, error) {

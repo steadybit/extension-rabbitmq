@@ -187,77 +187,108 @@ func createPublishRequest(state *ProduceMessageAttackState) (exchange string, ro
 	}
 }
 
-// Example usage inside your worker loop (replace Kafka produce with Publish):
 func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMessageAttackState, checkEnded func(*ExecutionRunData, *ProduceMessageAttackState) bool) {
-	amqpConn, amqpChan, err := clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
+	// Dial once per worker, reuse channel
+	conn, ch, err := clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to connect to RabbitMQ via AMQP")
+		log.Error().Err(err).Msg("AMQP connect failed")
 		return
 	}
-	defer amqpConn.Close()
-	defer amqpChan.Close()
+	defer func() {
+		_ = ch.Close()
+		_ = conn.Close()
+	}()
 
-	// Ensure target queue exists in the selected vhost without creating it (fail fast if missing)
-	if state.Queue != "" {
-		if _, qErr := amqpChan.QueueDeclarePassive(state.Queue, true, false, false, false, nil); qErr != nil {
-			log.Error().Err(qErr).Str("queue", state.Queue).Str("vhost", state.Vhost).Msg("Queue not found or inaccessible; aborting publish worker")
-			return
-		}
+	// Enable confirms (best-effort). If not supported, continue without.
+	var confirms <-chan amqp.Confirmation
+	if err := ch.Confirm(false); err == nil {
+		confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
+	} else {
+		log.Debug().Msg("publisher confirms not available")
 	}
 
-	// Enable publisher confirms and set up listeners
-	if err := amqpChan.Confirm(false); err != nil {
-		log.Warn().Err(err).Msg("Publisher confirms not available; proceeding without confirms")
-	}
-	confirms := amqpChan.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*4))
-	returns := amqpChan.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*4))
-
-	// Log returned (unroutable) messages
+	// Always listen for returns to detect unroutable messages
+	returns := ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
 	go func() {
 		for r := range returns {
-			log.Warn().Str("exchange", r.Exchange).Str("routingKey", r.RoutingKey).Uint16("code", r.ReplyCode).Str("text", r.ReplyText).Msg("Message returned by broker (unroutable)")
+			log.Warn().
+				Str("exchange", r.Exchange).
+				Str("routingKey", r.RoutingKey).
+				Uint16("code", r.ReplyCode).
+				Str("text", r.ReplyText).
+				Msg("message returned (unroutable)")
 		}
 	}()
 
+	// Prepare static publishing data once
+	exchange, routingKey, pubTemplate := createPublishRequest(state)
+	mandatory := true
+	immediate := false
+
+	// Helper to (re)dial once on demand
+	redial := func() error {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		if ch != nil {
+			_ = ch.Close()
+		}
+		var e error
+		conn, ch, e = clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
+		if e != nil {
+			return e
+		}
+		// Re-arm confirms and returns
+		confirms = nil
+		if e := ch.Confirm(false); e == nil {
+			confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
+		}
+		returns = ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
+		return nil
+	}
+
 	for range executionRunData.jobs {
 		if !checkEnded(executionRunData, state) {
-			exchangeCreated, routingKey, pub := createPublishRequest(state)
+			// per-message payload (cheap copy)
+			pub := pubTemplate
+			pub.Timestamp = time.Now()
 
-			// Drain stale notifications
-			for {
-				select {
-				case <-confirms:
-					continue
-				case <-returns:
-					continue
-				default:
-					goto drained
-				}
-			}
-		drained:
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := ch.PublishWithContext(ctx, exchange, routingKey, mandatory, immediate, pub)
+			cancel()
 
-			// Publish with mandatory=true, immediate=false so unroutable messages are returned
-			mandatory := true
-			immediate := false
-			err = amqpChan.PublishWithContext(context.Background(), exchangeCreated, routingKey, mandatory, immediate, pub)
 			executionRunData.requestCounter.Add(1)
 			if err != nil {
-				log.Error().Err(err).Str("exchange", exchangeCreated).Str("routingKey", routingKey).Msg("Failed to publish message")
-				continue
+				log.Error().Err(err).Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish failed")
+				// single retry after redial
+				if re := redial(); re == nil {
+					ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+					err = ch.PublishWithContext(ctx2, exchange, routingKey, mandatory, immediate, pub)
+					cancel2()
+					if err != nil {
+						log.Error().Err(err).Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish failed after redial")
+						continue
+					}
+				} else {
+					log.Error().Err(re).Msg("amqp redial failed")
+					continue
+				}
 			}
 
-			select {
-			case r := <-returns:
-				log.Error().Str("exchange", r.Exchange).Str("routingKey", r.RoutingKey).Uint16("code", r.ReplyCode).Str("text", r.ReplyText).Msg("Message returned (unroutable)")
+			// Wait for confirm if available, else count success immediately
+			if confirms == nil {
+				executionRunData.requestSuccessCounter.Add(1)
 				continue
+			}
+			select {
 			case c := <-confirms:
 				if c.Ack {
 					executionRunData.requestSuccessCounter.Add(1)
 				} else {
-					log.Error().Str("exchange", exchangeCreated).Str("routingKey", routingKey).Msg("Publishing negatively acknowledged (nack)")
+					log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish nack")
 				}
 			case <-time.After(5 * time.Second):
-				log.Error().Str("exchange", exchangeCreated).Str("routingKey", routingKey).Msg("No publish confirm within 5s")
+				log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("no publish confirm within 5s")
 			}
 		}
 	}
@@ -268,25 +299,20 @@ func start(state *ProduceMessageAttackState) {
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load execution run data")
 	}
-	interval := time.Duration(state.DelayBetweenRequestsInMS) * time.Millisecond
-	if interval <= 0 {
-		log.Warn().Uint64("DelayBetweenRequestsInMS", state.DelayBetweenRequestsInMS).Msg("non-positive interval; defaulting to 100ms")
-		interval = 100 * time.Millisecond
-	}
-	executionRunData.tickers = time.NewTicker(interval)
+	executionRunData.tickers = time.NewTicker(time.Duration(state.DelayBetweenRequestsInMS) * time.Millisecond)
 	executionRunData.stopTicker = make(chan bool)
 
 	now := time.Now()
-	log.Debug().Msgf("Schedule first record at %v", now)
+	log.Debug().Msgf("Schedule first message at %v", now)
 	executionRunData.jobs <- now
 	go func() {
 		for {
 			select {
 			case <-executionRunData.stopTicker:
-				log.Debug().Msg("Stop Record Scheduler")
+				log.Debug().Msg("Stop Message Scheduler")
 				return
 			case t := <-executionRunData.tickers.C:
-				log.Debug().Msgf("Schedule Record at %v", t)
+				log.Debug().Msgf("Schedule Message at %v", t)
 				executionRunData.jobs <- t
 			}
 		}

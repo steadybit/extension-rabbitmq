@@ -23,14 +23,6 @@ const (
 )
 
 var (
-	vhost = action_kit_api.ActionParameter{
-		Name:         "vhost",
-		Label:        "Vhost",
-		Description:  extutil.Ptr("Virtual host (vhost) in which the target queue resides."),
-		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(false),
-		DefaultValue: extutil.Ptr("/"),
-	}
 	exchange = action_kit_api.ActionParameter{
 		Name:        "exchange",
 		Label:       "Exchange",
@@ -42,6 +34,7 @@ var (
 				Attribute: "rabbitmq.queue.bound_exchanges",
 			},
 		}),
+		DefaultValue: extutil.Ptr(""),
 	}
 	routingKey = action_kit_api.ActionParameter{
 		Name:         "routingKey",

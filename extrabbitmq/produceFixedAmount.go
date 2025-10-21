@@ -32,9 +32,9 @@ func (a *produceRabbitFixedAmountAction) NewEmptyState() ProduceMessageAttackSta
 
 func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
-		Id:          "com.steadybit.extension_rabbitmq.rabbitmq-queue.produce-fixed-amount",
-		Label:       "RabbitMQ: Produce (# of Messages)",
-		Description: "Publish a fixed number of messages to an exchange using the Management API.",
+		Id:          "com.steadybit.extension_rabbitmq.queue.produce-fixed-amount",
+		Label:       "Produce (# of Messages)",
+		Description: "Publish a fixed number of messages.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        extutil.Ptr(rabbitMQIcon),
 		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
@@ -45,7 +45,6 @@ func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlInternal,
 		Parameters: []action_kit_api.ActionParameter{
-			vhost,
 			exchange,
 			routingKey,
 			headers,
