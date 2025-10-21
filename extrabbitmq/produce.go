@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/extension-kit/extutil"
+	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"net/url"
 	"strings"
@@ -188,7 +189,7 @@ func createPublishRequest(state *ProduceMessageAttackState) (exchange string, ro
 
 // Example usage inside your worker loop (replace Kafka produce with Publish):
 func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMessageAttackState, checkEnded func(*ExecutionRunData, *ProduceMessageAttackState) bool) {
-	amqpConn, amqpChan, err := createNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
+	amqpConn, amqpChan, err := clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to connect to RabbitMQ via AMQP")
 		return

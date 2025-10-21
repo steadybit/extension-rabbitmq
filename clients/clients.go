@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -54,18 +55,6 @@ func GetByMgmtURL(mgmtURL string) (*EndpointClients, bool) {
 	defer poolMu.RUnlock()
 	c, ok := pool[mgmtURL]
 	return c, ok
-}
-
-// GetByAMQPURL Get by AMQP URL.
-func GetByAMQPURL(amqpURL string) (*EndpointClients, bool) {
-	poolMu.RLock()
-	defer poolMu.RUnlock()
-	for _, c := range pool {
-		if c.EP.AMQP != nil && c.EP.AMQP.URL == amqpURL {
-			return c, true
-		}
-	}
-	return nil, false
 }
 
 // --- internals ---
@@ -118,36 +107,47 @@ func newMgmtClient(ep *config.ManagementEndpoint) (*rabbithole.Client, error) {
 	return rabbithole.NewTLSClient(u.String(), user, pass, tr)
 }
 
-func newAMQPClients(ep *config.ManagementEndpoint) (*amqp.Connection, *amqp.Channel, error) {
-	if ep.AMQP == nil || ep.AMQP.URL == "" {
-		return nil, nil, fmt.Errorf("missing amqp.URL")
+func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {
+	if strings.TrimSpace(amqpUrl) == "" {
+		return nil, nil, fmt.Errorf("amqp url is empty")
 	}
-	au, err := url.Parse(ep.AMQP.URL)
+
+	au, err := url.Parse(amqpUrl)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("invalid amqp url: %w", err)
 	}
-	if au.Scheme == "amqp" {
+
+	// Inject credentials if provided and URL has none
+	if (user != "" || pass != "") && au.User == nil {
+		au.User = url.UserPassword(user, pass)
+	}
+
+	switch au.Scheme {
+	case "amqp":
 		conn, err := amqp.Dial(au.String())
 		if err != nil {
 			return nil, nil, err
 		}
 		ch, err := conn.Channel()
 		if err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, nil, err
 		}
 		return conn, ch, nil
-	}
-	if au.Scheme == "amqps" {
-		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: ep.AMQP.InsecureSkipVerify}
-		if ep.AMQP.CAFile != "" {
-			pem, err := os.ReadFile(ep.AMQP.CAFile)
+
+	case "amqps":
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+		if insecure {
+			tlsCfg.InsecureSkipVerify = true
+		}
+		if ca != "" {
+			pemBytes, err := os.ReadFile(ca)
 			if err != nil {
 				return nil, nil, err
 			}
 			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM(pem) {
-				return nil, nil, fmt.Errorf("invalid AMQP CA: %s", ep.AMQP.CAFile)
+			if !pool.AppendCertsFromPEM(pemBytes) {
+				return nil, nil, fmt.Errorf("invalid CA: %s", ca)
 			}
 			tlsCfg.RootCAs = pool
 		}
@@ -157,33 +157,12 @@ func newAMQPClients(ep *config.ManagementEndpoint) (*amqp.Connection, *amqp.Chan
 		}
 		ch, err := conn.Channel()
 		if err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, nil, err
 		}
 		return conn, ch, nil
-	}
-	return nil, nil, fmt.Errorf("unsupported amqp scheme: %s", au.Scheme)
-}
 
-// DialAMQPByMgmtURL dials AMQP on demand for the endpoint identified by the management URL.
-func DialAMQPByMgmtURL(mgmtURL string) (*amqp.Connection, *amqp.Channel, error) {
-	poolMu.RLock()
-	c, ok := pool[mgmtURL]
-	poolMu.RUnlock()
-	if !ok || c == nil || c.EP == nil {
-		return nil, nil, fmt.Errorf("unknown management endpoint: %s", mgmtURL)
+	default:
+		return nil, nil, fmt.Errorf("unsupported amqp scheme: %s", au.Scheme)
 	}
-	return newAMQPClients(c.EP)
-}
-
-// DialAMQPByAMQPURL dials AMQP on demand for the endpoint that matches the given AMQP URL.
-func DialAMQPByAMQPURL(amqpURL string) (*amqp.Connection, *amqp.Channel, error) {
-	poolMu.RLock()
-	defer poolMu.RUnlock()
-	for _, c := range pool {
-		if c.EP != nil && c.EP.AMQP != nil && c.EP.AMQP.URL == amqpURL {
-			return newAMQPClients(c.EP)
-		}
-	}
-	return nil, nil, fmt.Errorf("unknown amqp endpoint: %s", amqpURL)
 }

@@ -114,6 +114,6 @@ func (a *produceRabbitPeriodicallyAction) Stop(ctx context.Context, state *Produ
 	return stop(state)
 }
 
-func (l *produceRabbitPeriodicallyAction) getExecutionRunData(executionID uuid.UUID) (*ExecutionRunData, error) {
+func (a *produceRabbitPeriodicallyAction) getExecutionRunData(executionID uuid.UUID) (*ExecutionRunData, error) {
 	return loadExecutionRunData(executionID)
 }

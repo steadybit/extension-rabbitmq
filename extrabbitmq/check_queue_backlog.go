@@ -26,7 +26,7 @@ type QueueBacklogCheckAction struct{}
 type QueueBacklogCheckState struct {
 	Vhost   string
 	Queue   string
-	AmqpURL string
+	MgmtURL string
 
 	AcceptableBacklog int64
 	End               time.Time
@@ -148,7 +148,7 @@ func (a *QueueBacklogCheckAction) Prepare(_ context.Context, state *QueueBacklog
 
 	state.Queue = request.Target.Attributes["rabbitmq.queue.name"][0]
 	state.Vhost = request.Target.Attributes["rabbitmq.queue.vhost"][0]
-	state.AmqpURL = extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.amqp.url")[0]
+	state.MgmtURL = extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.mgmt.url")[0]
 
 	state.AcceptableBacklog = extutil.ToInt64(request.Config["acceptableBacklog"])
 	state.StateCheckFailed = false
@@ -171,7 +171,7 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 	now := time.Now()
 
 	// reuse pooled client for this AMQP URL
-	c, ok := clients.GetByAMQPURL(state.AmqpURL)
+	c, ok := clients.GetByMgmtURL(state.MgmtURL)
 	if !ok || c == nil || c.Mgmt == nil {
 		return nil, extutil.Ptr(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
 	}

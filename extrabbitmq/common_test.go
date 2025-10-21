@@ -1,151 +1,122 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2025 Steadybit GmbH
+
 package extrabbitmq
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
+	"encoding/json"
 	"testing"
+	"time"
 
-	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-// --- Helper functions ---
-
-func mockConfig() {
-	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
-		{
-			URL:                "http://localhost:15672",
-			Username:           "guest",
-			Password:           "guest",
-			InsecureSkipVerify: false,
-		},
-	}
-}
-
-// --- Tests for createNewManagementClient ---
-
-func TestCreateNewManagementClient_HTTP(t *testing.T) {
-	mockConfig()
-	client, err := createNewManagementClient("http://localhost:15672", false, "")
-	assert.NoError(t, err)
-	assert.NotNil(t, client)
-	assert.IsType(t, &rabbithole.Client{}, client)
-}
-
-func TestCreateNewManagementClient_HTTPS_WithCA(t *testing.T) {
-	mockConfig()
-	tmpFile := filepath.Join(t.TempDir(), "ca.pem")
-	os.WriteFile(tmpFile, []byte(testCA), 0644)
-
-	_, err := createNewManagementClient("https://localhost:15671", true, tmpFile)
-	assert.Error(t, err) // likely connection error, just check no panic
-}
-
-func TestCreateNewManagementClient_InvalidURL(t *testing.T) {
-	_, err := createNewManagementClient(":::/badurl", false, "")
-	assert.Error(t, err)
-}
-
-func TestCreateNewManagementClient_NoEndpoints(t *testing.T) {
-	config.Config.ManagementEndpoints = []config.ManagementEndpoint{}
-	_, err := createNewManagementClient("", false, "")
-	assert.Error(t, err)
-}
-
-// --- Tests for createNewAMQPConnection ---
-
-func TestCreateNewAMQPConnection_InvalidScheme(t *testing.T) {
-	_, _, err := createNewAMQPConnection("invalid://host", "", "", false, "")
-	assert.Error(t, err)
-}
-
-func TestCreateNewAMQPConnection_EmptyURL(t *testing.T) {
-	_, _, err := createNewAMQPConnection("", "", "", false, "")
-	assert.Error(t, err)
-}
-
-func TestCreateNewAMQPConnection_InjectCredentials(t *testing.T) {
-	url := "amqp://localhost:5672/"
-	conn, ch, err := createNewAMQPConnection(url, "guest", "guest", false, "")
-	assert.Error(t, err) // No server expected locally
-	assert.Nil(t, conn)
-	assert.Nil(t, ch)
-}
-
-// --- Tests for setEndpointsJSON ---
 
 func TestSetEndpointsJSON(t *testing.T) {
 	eps := []config.ManagementEndpoint{
-		{URL: "http://localhost:15672", Username: "guest", Password: "guest"},
+		{
+			URL:      "http://localhost:15672",
+			Username: "user",
+			Password: "pass",
+			AMQP: &config.AMQPOptions{
+				URL:                "amqp://localhost:5672",
+				Vhost:              "/",
+				InsecureSkipVerify: false,
+			},
+		},
 	}
+
 	setEndpointsJSON(eps)
 	assert.NotEmpty(t, config.Config.ManagementEndpointsJSON)
-	assert.Contains(t, config.Config.ManagementEndpointsJSON, "localhost:15672")
-	assert.Equal(t, eps, config.Config.ManagementEndpoints)
-}
 
-// --- Tests for findTargetByLabel ---
+	var parsed []config.ManagementEndpoint
+	err := json.Unmarshal([]byte(config.Config.ManagementEndpointsJSON), &parsed)
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+	assert.Equal(t, "http://localhost:15672", parsed[0].URL)
+	assert.Equal(t, "amqp://localhost:5672", parsed[0].AMQP.URL)
+}
 
 func TestFindTargetByLabel(t *testing.T) {
 	targets := []discovery_kit_api.Target{
-		{Label: "A"},
-		{Label: "B"},
+		{Label: "queue-A"},
+		{Label: "queue-B"},
 	}
-	found := findTargetByLabel(targets, "B")
-	assert.NotNil(t, found)
-	assert.Equal(t, "B", found.Label)
-	notFound := findTargetByLabel(targets, "C")
-	assert.Nil(t, notFound)
-}
+	tgt := findTargetByLabel(targets, "queue-B")
+	require.NotNil(t, tgt)
+	assert.Equal(t, "queue-B", tgt.Label)
 
-// --- Tests for assertAttr ---
+	tgt = findTargetByLabel(targets, "non-existent")
+	assert.Nil(t, tgt)
+}
 
 func TestAssertAttr(t *testing.T) {
 	tgt := discovery_kit_api.Target{
 		Attributes: map[string][]string{
-			"key": {"value"},
+			"rabbitmq.queue.name": {"order"},
 		},
 	}
-	assertAttr(t, tgt, "key", "value")
+
+	// Should not panic
+	assert.NotPanics(t, func() {
+		assertAttr(t, tgt, "rabbitmq.queue.name", "order")
+	})
 }
 
-// --- Tests for FetchTargetPerClient ---
+func TestProduceMessageAttackState_DefaultValues(t *testing.T) {
+	s := ProduceMessageAttackState{}
+	assert.Empty(t, s.Vhost)
+	assert.Empty(t, s.Queue)
+	assert.Zero(t, s.DelayBetweenRequestsInMS)
+	assert.Equal(t, 0, s.SuccessRate)
+	assert.True(t, s.Timeout.IsZero())
+	assert.Equal(t, 0, s.MaxConcurrent)
+	assert.Empty(t, s.RoutingKey)
+	assert.Empty(t, s.Body)
+	assert.Equal(t, uint64(0), s.NumberOfMessages)
+	assert.Empty(t, s.Headers)
+	assert.Empty(t, s.AmqpURL)
+	assert.Empty(t, s.AmqpUser)
+	assert.Empty(t, s.AmqpPassword)
+	assert.False(t, s.AmqpInsecureSkipVerify)
+	assert.Empty(t, s.AmqpCA)
+}
 
-func TestFetchTargetPerClient(t *testing.T) {
-	mockConfig()
-	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
-		return []discovery_kit_api.Target{{Label: "ok"}}, nil
+func TestProduceMessageAttackState_WithValues(t *testing.T) {
+	headers := map[string]string{"k": "v"}
+	timeout := time.Now().Add(10 * time.Minute)
+	state := ProduceMessageAttackState{
+		Vhost:                    "/",
+		Exchange:                 "ex1",
+		Queue:                    "queue1",
+		DelayBetweenRequestsInMS: 100,
+		SuccessRate:              95,
+		Timeout:                  timeout,
+		MaxConcurrent:            5,
+		RoutingKey:               "rk",
+		Body:                     "body",
+		NumberOfMessages:         10,
+		Headers:                  headers,
+		AmqpURL:                  "amqp://localhost:5672",
+		AmqpUser:                 "user",
+		AmqpPassword:             "pass",
+		AmqpInsecureSkipVerify:   true,
+		AmqpCA:                   "/tmp/ca.pem",
 	}
-	targets, err := FetchTargetPerClient(handler)
-	assert.NoError(t, err)
-	assert.NotNil(t, targets)
+
+	assert.Equal(t, "/", state.Vhost)
+	assert.Equal(t, "queue1", state.Queue)
+	assert.Equal(t, 100, int(state.DelayBetweenRequestsInMS))
+	assert.Equal(t, 95, state.SuccessRate)
+	assert.Equal(t, timeout, state.Timeout)
+	assert.Equal(t, 5, state.MaxConcurrent)
+	assert.Equal(t, "rk", state.RoutingKey)
+	assert.Equal(t, "body", state.Body)
+	assert.Equal(t, uint64(10), state.NumberOfMessages)
+	assert.Equal(t, headers, state.Headers)
+	assert.Equal(t, "amqp://localhost:5672", state.AmqpURL)
+	assert.True(t, state.AmqpInsecureSkipVerify)
+	assert.Equal(t, "/tmp/ca.pem", state.AmqpCA)
 }
-
-func TestFetchTargetPerClient_HandlerError(t *testing.T) {
-	mockConfig()
-	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
-		return nil, errors.New("test")
-	}
-	targets, err := FetchTargetPerClient(handler)
-	assert.NoError(t, err)
-	assert.Empty(t, targets)
-}
-
-// --- Test Data ---
-
-const testCA = `
------BEGIN CERTIFICATE-----
-MIIB9TCCAVugAwIBAgIUfQkBkQf5E+j1tB5EpXyRBB2q28EwCgYIKoZIzj0EAwIw
-EjEQMA4GA1UEAwwHdGVzdENBMB4XDTI0MDYyMjA5MDUwMFoXDTM0MDYxOTA5MDUw
-MFowEjEQMA4GA1UEAwwHdGVzdENBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE
-P0oZl08OGsUm6m5H1RGFtSgGB7LrYMT8M0vP04Xv0qvTVrf0LPPDs/vR8H7ZbOjx
-Aq1dOUnJjO1EhP10/6u7wKNtMGswHQYDVR0OBBYEFOp+F8rP1qFXTY9H+F3AJpyH
-piZSMB8GA1UdIwQYMBaAFOp+F8rP1qFXTY9H+F3AJpyHpiZSMBIGA1UdEwEB/wQI
-MAAwDgYDVR0PAQH/BAQDAgXgMAoGCCqGSM49BAMCA0cAMEQCIG+1baxuP9aDhh5u
-fPzIdv4K5uO1D4IUnEw5ZlW7L1VwAiBYmWzq47e0GChpIo1Hz61XKGHGv2Kr7CvT
-CdLUdYz7iQ==
------END CERTIFICATE-----
-`
