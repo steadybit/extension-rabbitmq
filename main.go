@@ -80,6 +80,7 @@ func registerHandlers(ctx context.Context) {
 
 	// Actions
 	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitFixedAmount())
+	action_kit_sdk.RegisterAction(extrabbitmq.NewAlterQueueMaxLengthAttack())
 
 	// Checks
 	action_kit_sdk.RegisterAction(extrabbitmq.NewQueueBacklogCheckAction())

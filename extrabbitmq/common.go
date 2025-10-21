@@ -10,7 +10,6 @@ import (
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/extension-kit/extutil"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -109,89 +108,6 @@ var (
 		Advanced:     extutil.Ptr(true),
 	}
 )
-
-func createNewManagementClient(host string, insecureSkipVerify bool, caFile string) (*rabbithole.Client, error) {
-	// host may be empty -> use first configured endpoint
-	if host == "" {
-		if len(config.Config.ManagementEndpoints) == 0 {
-			return nil, fmt.Errorf("no management endpoints configured")
-		}
-		host = config.Config.ManagementEndpoints[0].URL
-	}
-
-	u, err := url.Parse(host)
-	if err != nil {
-		return nil, fmt.Errorf("invalid host URL: %w", err)
-	}
-
-	// if TLS settings not provided explicitly use provided params
-	insecure := insecureSkipVerify
-	ca := strings.TrimSpace(caFile)
-
-	// Resolve credentials
-	username := ""
-	password := ""
-	if u.User != nil {
-		if n := u.User.Username(); n != "" {
-			username = n
-		}
-		if pw, ok := u.User.Password(); ok {
-			password = pw
-		}
-		u.User = nil
-	}
-	for i := range config.Config.ManagementEndpoints {
-		ep := &config.Config.ManagementEndpoints[i]
-		if epURL, err := url.Parse(ep.URL); err == nil && epURL.Host == u.Host {
-			if username == "" {
-				username = ep.Username
-			}
-			if password == "" {
-				password = ep.Password
-			}
-			if ca == "" && ep.CAFile != "" {
-				ca = ep.CAFile
-			}
-			if !insecure && ep.InsecureSkipVerify {
-				insecure = true
-			}
-			break
-		}
-	}
-
-	// Management HTTP(S) client
-	if u.Scheme == "http" && !insecure && ca == "" {
-		mgmt, err := rabbithole.NewClient(u.String(), username, password)
-		if err != nil {
-			return nil, err
-		}
-		return mgmt, err
-	}
-
-	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
-	if insecure {
-		tlsCfg.InsecureSkipVerify = true
-	}
-	if ca != "" {
-		pemBytes, readErr := os.ReadFile(ca)
-		if readErr != nil {
-			return nil, fmt.Errorf("read CA bundle: %w", readErr)
-		}
-		pool := x509.NewCertPool()
-		if ok := pool.AppendCertsFromPEM(pemBytes); !ok {
-			return nil, fmt.Errorf("failed to parse CA bundle in %s", ca)
-		}
-		tlsCfg.RootCAs = pool
-	}
-
-	transport := &http.Transport{TLSClientConfig: tlsCfg}
-	mgmt, err := rabbithole.NewTLSClient(u.String(), username, password, transport)
-	if err != nil {
-		return nil, err
-	}
-
-	return mgmt, err
-}
 
 func createNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {
 	if strings.TrimSpace(amqpUrl) == "" {
