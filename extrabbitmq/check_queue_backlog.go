@@ -174,7 +174,6 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 	if err != nil {
 		return nil, err
 	}
-	// reuse pooled client for this AMQP URL
 	c, err := clients.CreateMgmtClientFromURL(managementEndpoint.URL, managementEndpoint.Username, managementEndpoint.Password, managementEndpoint.InsecureSkipVerify, managementEndpoint.CAFile)
 	if err != nil {
 		return nil, extutil.Ptr(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
