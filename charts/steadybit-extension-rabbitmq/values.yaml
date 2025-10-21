@@ -4,15 +4,9 @@
 # RabbitMQ connectivity configuration
 rabbitmq:
   auth:
-    # rabbitmq.auth.secretName -- Name of an existing Secret that contains a key with the JSON array
-    # of management endpoints. If set, this takes precedence over inline `managementEndpoints`.
-    # The secret key defaults to `managementEndpointsJson` (see `rabbitmq.auth.secretKey`).
-    secretName: null
-
-    # rabbitmq.auth.secretKey -- Key in the Secret that stores the JSON array
-    # e.g., [{"url":"https://...","username":"...","password":"...","amqp":{"url":"amqps://...","vhost":"/","insecureSkipVerify":false}}]
-    secretKey: managementEndpointsJson
-
+    # rabbitmq.auth.existingSecret -- Name of an existing Secret that contains a key with the JSON array
+    # of management endpoints. If set, this takes precedence over inline `managementEndpoints`..
+    existingSecret: null
     # rabbitmq.auth.managementEndpoints -- Inline configuration for management endpoints.
     # Used when `secretName` is not set. This mirrors the Go config structure.
     managementEndpoints: []

@@ -55,7 +55,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 		Label:       "Check Queue Backlog",
 		Description: "Check the backlog of a RabbitMQ queue (total messages in queue). Fails if backlog exceeds the threshold during the check window.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(""),
+		Icon:        extutil.Ptr(rabbitMQIcon),
 		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
 			TargetType:          rabbitQueueTargetId,
 			QuantityRestriction: extutil.Ptr(action_kit_api.QuantityRestrictionAll),
