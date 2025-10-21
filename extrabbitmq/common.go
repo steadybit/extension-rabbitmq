@@ -65,14 +65,6 @@ var (
 		DefaultValue: extutil.Ptr("60s"),
 		Required:     extutil.Ptr(true),
 	}
-	duration = action_kit_api.ActionParameter{
-		Name:         "duration",
-		Label:        "Duration",
-		Description:  extutil.Ptr("In which timeframe should the specified records be produced?"),
-		Type:         action_kit_api.ActionParameterTypeDuration,
-		DefaultValue: extutil.Ptr("10s"),
-		Required:     extutil.Ptr(true),
-	}
 	successRate = action_kit_api.ActionParameter{
 		Name:         "successRate",
 		Label:        "Required Success Rate",
@@ -106,12 +98,12 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_ap
 
 	all := make([]discovery_kit_api.Target, 0)
 	for _, ep := range config.Config.ManagementEndpoints {
-		c, ok := clients.GetByMgmtURL(ep.URL)
-		if !ok || c == nil || c.Mgmt == nil {
-			log.Warn().Str("endpoint", ep.URL).Msg("no pooled management client for endpoint")
+		c, err := clients.CreateMgmtClientFromURL(ep.URL, ep.Username, ep.Password, ep.InsecureSkipVerify, ep.CAFile)
+		if err != nil {
+			log.Warn().Str("endpoint", ep.URL).Msg("can't get a client.")
 			continue
 		}
-		tgts, err := fn(c.Mgmt)
+		tgts, err := fn(c)
 		if err != nil {
 			log.Warn().Err(err).Str("endpoint", ep.URL).Msg("handler returned error for endpoint")
 			continue

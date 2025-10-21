@@ -8,7 +8,6 @@ import (
 	"context"
 	_ "github.com/KimMachineGun/automemlimit" // Sets GOMEMLIMIT to 90% of cgroup limit.
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/advice-kit/go/advice_kit_api"
@@ -21,7 +20,6 @@ import (
 	"github.com/steadybit/extension-kit/extlogging"
 	"github.com/steadybit/extension-kit/extruntime"
 	"github.com/steadybit/extension-kit/extsignals"
-	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"github.com/steadybit/extension-rabbitmq/extrabbitmq"
 	_ "go.uber.org/automaxprocs" // Adjusts GOMAXPROCS.
@@ -49,12 +47,6 @@ func main() {
 	exthealth.SetReady(false)
 	exthealth.StartProbes(8084)
 
-	err := clients.Init()
-	if err != nil {
-		// Proceed even if some endpoints failed to initialize. Pool may be partially available.
-		log.Warn().Err(err).Msg("client initialization reported errors; continuing with partial pool")
-	}
-
 	ctx, cancel := SignalCanceledContext()
 	registerHandlers(ctx)
 
@@ -76,12 +68,10 @@ func registerHandlers(ctx context.Context) {
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitVhostDiscovery(ctx))
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitNodeDiscovery(ctx))
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitQueueDiscovery(ctx))
-	//discovery_kit_sdk.Register(extrabbitmq.NewRabbitExchangeDiscovery(ctx))
 
 	// Actions
 	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitFixedAmount())
 	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitPeriodically())
-	action_kit_sdk.RegisterAction(extrabbitmq.NewAlterQueueMaxLengthAttack())
 
 	// Checks
 	action_kit_sdk.RegisterAction(extrabbitmq.NewQueueBacklogCheckAction())

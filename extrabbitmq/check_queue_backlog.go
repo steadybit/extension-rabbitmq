@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"strconv"
 	"time"
 
@@ -129,7 +130,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 			},
 		}),
 		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("2s"),
+			CallInterval: extutil.Ptr("5s"),
 		}),
 	}
 }
@@ -169,15 +170,17 @@ func (a *QueueBacklogCheckAction) Status(ctx context.Context, state *QueueBacklo
 
 func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState) (*action_kit_api.StatusResult, error) {
 	now := time.Now()
-
+	managementEndpoint, err := config.GetEndpointByMgmtURL(state.MgmtURL)
+	if err != nil {
+		return nil, err
+	}
 	// reuse pooled client for this AMQP URL
-	c, ok := clients.GetByMgmtURL(state.MgmtURL)
-	if !ok || c == nil || c.Mgmt == nil {
+	c, err := clients.CreateMgmtClientFromURL(managementEndpoint.URL, managementEndpoint.Username, managementEndpoint.Password, managementEndpoint.InsecureSkipVerify, managementEndpoint.CAFile)
+	if err != nil {
 		return nil, extutil.Ptr(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
 	}
-	mgmt := c.Mgmt
 
-	qi, err := mgmt.GetQueue(state.Vhost, state.Queue)
+	qi, err := c.GetQueue(state.Vhost, state.Queue)
 	if err != nil {
 		return nil, extutil.Ptr(extension_kit.ToError(fmt.Sprintf("failed to retrieve queue %s in vhost %s: %v", state.Queue, state.Vhost, err), err))
 	}

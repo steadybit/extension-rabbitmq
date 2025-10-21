@@ -164,3 +164,16 @@ func GetEndpointByAMQPURL(amqpURL string) (*ManagementEndpoint, error) {
 	}
 	return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", amqpURL)
 }
+
+func GetEndpointByMgmtURL(mgmtURL string) (*ManagementEndpoint, error) {
+	if strings.TrimSpace(mgmtURL) == "" {
+		return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", mgmtURL)
+	}
+	for i := range Config.ManagementEndpoints {
+		ep := &Config.ManagementEndpoints[i]
+		if ep.URL == mgmtURL {
+			return ep, nil
+		}
+	}
+	return nil, fmt.Errorf("no endpoint configuration found for amqp url: %s", mgmtURL)
+}

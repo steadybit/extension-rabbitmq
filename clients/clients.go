@@ -7,76 +7,20 @@ import (
 	"fmt"
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rs/zerolog/log"
-	"github.com/steadybit/extension-rabbitmq/config"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 )
 
-type EndpointClients struct {
-	EP   *config.ManagementEndpoint
-	Mgmt *rabbithole.Client
-}
-
-var (
-	once   sync.Once
-	poolMu sync.RWMutex
-	pool   = map[string]*EndpointClients{} // key: mgmt URL
-)
-
-// Init Call once at startup after config.ParseConfiguration().
-func Init() error {
-	var initErr error
-	once.Do(func() {
-		for i := range config.Config.ManagementEndpoints {
-			ep := &config.Config.ManagementEndpoints[i]
-			c, err := buildClients(ep)
-			if err != nil {
-				log.Warn().Err(err).Str("endpoint", ep.URL).Msg("init: failed to build clients")
-				if initErr == nil {
-					initErr = err
-				}
-				continue
-			}
-			poolMu.Lock()
-			pool[ep.URL] = c
-			poolMu.Unlock()
-		}
-	})
-	return initErr
-}
-
-// GetByMgmtURL Get by management URL.
-func GetByMgmtURL(mgmtURL string) (*EndpointClients, bool) {
-	poolMu.RLock()
-	defer poolMu.RUnlock()
-	c, ok := pool[mgmtURL]
-	return c, ok
-}
-
-// --- internals ---
-
-func buildClients(ep *config.ManagementEndpoint) (*EndpointClients, error) {
-	mgmt, err := newMgmtClient(ep)
-	if err != nil {
-		return nil, err
-	}
-	return &EndpointClients{EP: ep, Mgmt: mgmt}, nil
-}
-
-func newMgmtClient(ep *config.ManagementEndpoint) (*rabbithole.Client, error) {
-	if ep.URL == "" {
+func CreateMgmtClientFromURL(mgmtURL, user, pass string, insecure bool, caFile string) (*rabbithole.Client, error) {
+	if mgmtURL == "" {
 		return nil, fmt.Errorf("empty management URL")
 	}
-	u, err := url.Parse(ep.URL)
+	u, err := url.Parse(mgmtURL)
 	if err != nil {
 		return nil, err
 	}
-	user := ep.Username
-	pass := ep.Password
 	if (user == "" || pass == "") && u.User != nil {
 		if uu := u.User.Username(); uu != "" && user == "" {
 			user = uu
@@ -91,15 +35,15 @@ func newMgmtClient(ep *config.ManagementEndpoint) (*rabbithole.Client, error) {
 	if u.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
 	}
-	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: ep.InsecureSkipVerify}
-	if ep.CAFile != "" {
-		pem, err := os.ReadFile(ep.CAFile)
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecure}
+	if caFile != "" {
+		pem, err := os.ReadFile(caFile)
 		if err != nil {
 			return nil, err
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("invalid CA: %s", ep.CAFile)
+			return nil, fmt.Errorf("invalid CA: %s", caFile)
 		}
 		tlsCfg.RootCAs = pool
 	}
