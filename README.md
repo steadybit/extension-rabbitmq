@@ -49,14 +49,15 @@ docker run \
 ```sh
 helm repo add steadybit-extension-rabbitmq https://steadybit.github.io/extension-rabbitmq
 helm repo update
+
 helm upgrade steadybit-extension-rabbitmq \
-    --install \
-    --wait \
-    --timeout 5m0s \
-    --create-namespace \
-    --namespace steadybit-agent \
-    --set kafka.seedBrokers="localhost:9092" \
-    steadybit-extension-kafka/steadybit-extension-rabbitmq
+  --install \
+  --wait \
+  --timeout 5m0s \
+  --create-namespace \
+  --namespace steadybit-agent \
+  --set 'rabbitmq.managementEndpoints=[{"url":"http://localhost:15672","username":"guest","password":"guest","amqp":{"url":"amqp://localhost:5672","vhost":"/"}}]' \
+  steadybit-extension-rabbitmq/steadybit-extension-rabbitmq
 ```
 
 ## Register the extension
