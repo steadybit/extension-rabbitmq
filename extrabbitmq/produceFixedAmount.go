@@ -83,6 +83,8 @@ func getDelayBetweenRequestsInMsFixedAmount(duration uint64, numberOfRequests ui
 
 // Prepare validates request and sets up state. It defers to shared prepare helpers where available.
 func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *ProduceMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
+	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
+
 	if extutil.ToInt64(request.Config["duration"]) == 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}

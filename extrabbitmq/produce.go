@@ -48,7 +48,6 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMess
 	if state.MaxConcurrent == 0 {
 		return nil, fmt.Errorf("max concurrent can't be zero")
 	}
-	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
 	state.RoutingKey = extutil.ToString(request.Config["routingKey"])
 	state.Body = extutil.ToString(request.Config["body"])
 	state.ExecutionID = request.ExecutionId
