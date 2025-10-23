@@ -5,6 +5,7 @@ package clients
 
 import (
 	"crypto/tls"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"net/http"
 	"net/url"
 	"testing"
@@ -17,32 +18,42 @@ import (
 
 // ---- CreateMgmtClientFromURL ----
 
+func createConfig(url string, user string, pass string, insecure bool, ca string) *config.ManagementEndpoint {
+	return &config.ManagementEndpoint{
+		URL:                url,
+		Username:           user,
+		Password:           pass,
+		InsecureSkipVerify: insecure,
+		CAFile:             ca,
+	}
+}
+
 func TestCreateMgmtClientFromURL_EmptyURL(t *testing.T) {
-	c, err := CreateMgmtClientFromURL("", "user", "pass", false, "")
+	c, err := CreateMgmtClientFromURL(createConfig("", "user", "pass", false, ""))
 	assert.Nil(t, c)
 	assert.EqualError(t, err, "empty management URL")
 }
 
 func TestCreateMgmtClientFromURL_InvalidURL(t *testing.T) {
-	c, err := CreateMgmtClientFromURL("http//missing-colon", "user", "pass", false, "")
+	c, err := CreateMgmtClientFromURL(createConfig("http//missing-colon", "user", "pass", false, ""))
 	assert.Nil(t, c)
 	assert.Error(t, err)
 }
 
 func TestCreateMgmtClientFromURL_UnsupportedScheme(t *testing.T) {
-	c, err := CreateMgmtClientFromURL("ftp://host", "user", "pass", false, "")
+	c, err := CreateMgmtClientFromURL(createConfig("ftp://host", "user", "pass", false, ""))
 	assert.Nil(t, c)
 	assert.EqualError(t, err, "unsupported scheme: ftp")
 }
 
 func TestCreateMgmtClientFromURL_HTTP_Succeeds(t *testing.T) {
-	c, err := CreateMgmtClientFromURL("http://localhost:15672", "user", "pass", false, "")
+	c, err := CreateMgmtClientFromURL(createConfig("http://localhost:15672", "user", "pass", false, ""))
 	assert.NoError(t, err)
 	assert.IsType(t, &rabbithole.Client{}, c)
 }
 
 func TestCreateMgmtClientFromURL_HTTPS_Insecure_NoCA(t *testing.T) {
-	c, err := CreateMgmtClientFromURL("https://localhost:15672", "user", "pass", true, "")
+	c, err := CreateMgmtClientFromURL(createConfig("https://localhost:15672", "user", "pass", true, ""))
 	assert.NoError(t, err)
 	assert.IsType(t, &rabbithole.Client{}, c)
 }
@@ -53,7 +64,7 @@ func TestCreateMgmtClientFromURL_ExtractsCredentialsFromURL(t *testing.T) {
 		Host:   "localhost:15672",
 		User:   url.UserPassword("admin", "secret"),
 	}
-	c, err := CreateMgmtClientFromURL(u.String(), "", "", false, "")
+	c, err := CreateMgmtClientFromURL(createConfig(u.String(), "", "", false, ""))
 	assert.NoError(t, err)
 	assert.NotNil(t, c)
 }

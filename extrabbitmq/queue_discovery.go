@@ -75,6 +75,7 @@ func (r *rabbitQueueDiscovery) DescribeAttributes() []discovery_kit_api.Attribut
 		{Attribute: "rabbitmq.queue.status", Label: discovery_kit_api.PluralLabel{One: "Status", Other: "Status"}},
 		{Attribute: "rabbitmq.queue.durable", Label: discovery_kit_api.PluralLabel{One: "Durable", Other: "Durable"}},
 		{Attribute: "rabbitmq.queue.auto_delete", Label: discovery_kit_api.PluralLabel{One: "Auto-delete", Other: "Auto-delete"}},
+		{Attribute: "rabbitmq.queue.max_length", Label: discovery_kit_api.PluralLabel{One: "Max length", Other: "Max lengths"}},
 		{Attribute: "rabbitmq.amqp.url", Label: discovery_kit_api.PluralLabel{One: "AMQP URL", Other: "AMQP URLs"}},
 		{Attribute: "rabbitmq.cluster.name", Label: discovery_kit_api.PluralLabel{One: "Cluster name", Other: "Cluster names"}},
 	}
@@ -117,13 +118,35 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 
 func toQueueTarget(mgmtURL, amqpURL string, q rabbithole.QueueInfo, cluster string) discovery_kit_api.Target {
 	label := q.Vhost + "/" + q.Name
+	// Extract max-length from queue arguments (if defined)
+	var maxLengthStr string
+	if q.Arguments != nil {
+		if val, ok := q.Arguments["x-max-length"]; ok {
+			switch v := val.(type) {
+			case float64:
+				maxLengthStr = fmt.Sprintf("%.0f", v)
+			case int:
+				maxLengthStr = fmt.Sprintf("%d", v)
+			case int64:
+				maxLengthStr = fmt.Sprintf("%d", v)
+			case string:
+				maxLengthStr = v
+			default:
+				maxLengthStr = fmt.Sprintf("%v", v)
+			}
+		}
+	}
+	if maxLengthStr == "" {
+		maxLengthStr = "unlimited"
+	}
 	attrs := map[string][]string{
-		"rabbitmq.queue.vhost":  {q.Vhost},
-		"rabbitmq.queue.name":   {q.Name},
-		"rabbitmq.cluster.name": {cluster},
-		"rabbitmq.amqp.url":     {amqpURL},
-		"rabbitmq.queue.status": {q.Status},
-		"rabbitmq.mgmt.url":     {mgmtURL},
+		"rabbitmq.queue.vhost":      {q.Vhost},
+		"rabbitmq.queue.name":       {q.Name},
+		"rabbitmq.cluster.name":     {cluster},
+		"rabbitmq.amqp.url":         {amqpURL},
+		"rabbitmq.queue.status":     {q.Status},
+		"rabbitmq.mgmt.url":         {mgmtURL},
+		"rabbitmq.queue.max_length": {maxLengthStr},
 	}
 
 	return discovery_kit_api.Target{

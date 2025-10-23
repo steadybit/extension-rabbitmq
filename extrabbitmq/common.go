@@ -98,7 +98,7 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_ap
 
 	all := make([]discovery_kit_api.Target, 0)
 	for _, ep := range config.Config.ManagementEndpoints {
-		c, err := clients.CreateMgmtClientFromURL(ep.URL, ep.Username, ep.Password, ep.InsecureSkipVerify, ep.CAFile)
+		c, err := clients.CreateMgmtClientFromURL(&ep)
 		if err != nil {
 			log.Warn().Str("endpoint", ep.URL).Msg("can't get a client.")
 			continue

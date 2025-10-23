@@ -174,7 +174,7 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 	if err != nil {
 		return nil, err
 	}
-	c, err := clients.CreateMgmtClientFromURL(managementEndpoint.URL, managementEndpoint.Username, managementEndpoint.Password, managementEndpoint.InsecureSkipVerify, managementEndpoint.CAFile)
+	c, err := clients.CreateMgmtClientFromURL(managementEndpoint)
 	if err != nil {
 		return nil, extutil.Ptr(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
 	}

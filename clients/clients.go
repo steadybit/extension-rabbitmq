@@ -7,48 +7,49 @@ import (
 	"fmt"
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 )
 
-func CreateMgmtClientFromURL(mgmtURL, user, pass string, insecure bool, caFile string) (*rabbithole.Client, error) {
-	if mgmtURL == "" {
+func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Client, error) {
+	if config.URL == "" {
 		return nil, fmt.Errorf("empty management URL")
 	}
-	u, err := url.Parse(mgmtURL)
+	u, err := url.Parse(config.URL)
 	if err != nil {
 		return nil, err
 	}
-	if (user == "" || pass == "") && u.User != nil {
-		if uu := u.User.Username(); uu != "" && user == "" {
-			user = uu
+	if (config.Username == "" || config.Password == "") && u.User != nil {
+		if uu := u.User.Username(); uu != "" && config.Username == "" {
+			config.Username = uu
 		}
-		if pw, ok := u.User.Password(); ok && pass == "" {
-			pass = pw
+		if pw, ok := u.User.Password(); ok && config.Password == "" {
+			config.Password = pw
 		}
 	}
 	if u.Scheme == "http" {
-		return rabbithole.NewClient(u.String(), user, pass)
+		return rabbithole.NewClient(u.String(), config.Username, config.Password)
 	}
 	if u.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
 	}
-	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecure}
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile)
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: config.InsecureSkipVerify}
+	if config.CAFile != "" {
+		pem, err := os.ReadFile(config.CAFile)
 		if err != nil {
 			return nil, err
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("invalid CA: %s", caFile)
+			return nil, fmt.Errorf("invalid CA: %s", config.CAFile)
 		}
 		tlsCfg.RootCAs = pool
 	}
 	tr := &http.Transport{TLSClientConfig: tlsCfg}
-	return rabbithole.NewTLSClient(u.String(), user, pass, tr)
+	return rabbithole.NewTLSClient(u.String(), config.Username, config.Password, tr)
 }
 
 func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {

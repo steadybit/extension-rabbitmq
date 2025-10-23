@@ -46,6 +46,7 @@ func TestDescribeAttributesQueue(t *testing.T) {
 		"rabbitmq.queue.status",
 		"rabbitmq.queue.durable",
 		"rabbitmq.queue.auto_delete",
+		"rabbitmq.queue.max_length",
 		"rabbitmq.amqp.url",
 		"rabbitmq.cluster.name",
 	}

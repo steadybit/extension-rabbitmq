@@ -193,10 +193,6 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 		log.Error().Err(err).Msg("AMQP connect failed")
 		return
 	}
-	defer func() {
-		_ = ch.Close()
-		_ = conn.Close()
-	}()
 
 	// Enable confirms (best-effort). If not supported, continue without.
 	var confirms <-chan amqp.Confirmation
@@ -252,7 +248,7 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 			pub := pubTemplate
 			pub.Timestamp = time.Now()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			err := ch.PublishWithContext(ctx, exchange, routingKey, mandatory, immediate, pub)
 			cancel()
 
@@ -261,7 +257,7 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 				log.Error().Err(err).Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish failed")
 				// single retry after redial
 				if re := redial(); re == nil {
-					ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+					ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 					err = ch.PublishWithContext(ctx2, exchange, routingKey, mandatory, immediate, pub)
 					cancel2()
 					if err != nil {
@@ -291,6 +287,8 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 			}
 		}
 	}
+	defer conn.Close()
+	defer ch.Close()
 }
 
 func start(state *ProduceMessageAttackState) {
