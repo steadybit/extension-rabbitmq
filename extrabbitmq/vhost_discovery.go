@@ -84,7 +84,7 @@ func (r *rabbitVhostDiscovery) DiscoverTargets(ctx context.Context) ([]discovery
 // --- core listing ---
 
 func getAllVhosts(ctx context.Context) ([]discovery_kit_api.Target, error) {
-	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
 		out := make([]discovery_kit_api.Target, 0, 16)
 
 		vhosts, err := client.ListVhosts()
@@ -102,7 +102,7 @@ func getAllVhosts(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		return out, nil
 	}
 
-	targets, err := FetchTargetPerClient(handler)
+	targets, err := FetchTargetPerClient(handler, vhostTargetId)
 	if err != nil {
 		log.Warn().Err(err).Msg("vhost discovery encountered errors")
 	}

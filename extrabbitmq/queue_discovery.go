@@ -88,7 +88,7 @@ func (r *rabbitQueueDiscovery) DiscoverTargets(ctx context.Context) ([]discovery
 // --- core listing ---
 
 func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
-	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
 		out := make([]discovery_kit_api.Target, 0, 32)
 
 		qs, err := client.ListQueues()
@@ -108,7 +108,7 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		return out, nil
 	}
 
-	targets, err := FetchTargetPerClient(handler)
+	targets, err := FetchTargetPerClient(handler, queueTargetId)
 	if err != nil {
 		// FetchTargetPerClient already logs per-endpoint errors; only return fatal errors
 		log.Warn().Err(err).Msg("queue discovery encountered errors")

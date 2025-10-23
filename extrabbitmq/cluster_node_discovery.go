@@ -82,7 +82,7 @@ func (r *rabbitNodeDiscovery) DiscoverTargets(ctx context.Context) ([]discovery_
 // --- core listing ---
 
 func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
-	handler := func(client *rabbithole.Client) ([]discovery_kit_api.Target, error) {
+	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
 		out := make([]discovery_kit_api.Target, 0, 16)
 
 		nodes, err := client.ListNodes()
@@ -100,7 +100,7 @@ func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		return out, nil
 	}
 
-	targets, err := FetchTargetPerClient(handler)
+	targets, err := FetchTargetPerClient(handler, nodeTargetId)
 	if err != nil {
 		log.Warn().Err(err).Msg("node discovery encountered errors")
 	}

@@ -85,7 +85,7 @@ var (
 // FetchTargetPerClient iterates over all configured management endpoints, reusing pooled clients,
 // and calls the provided handler. The handler may return zero or more targets. All collected targets from
 // all endpoints are concatenated and returned. Individual endpoint errors are logged and do not stop iteration.
-func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_api.Target, error)) ([]discovery_kit_api.Target, error) {
+func FetchTargetPerClient(fn func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error), targetType string) ([]discovery_kit_api.Target, error) {
 	if len(config.Config.ManagementEndpoints) == 0 {
 		return nil, fmt.Errorf("no management endpoints configured")
 	}
@@ -97,9 +97,9 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client) ([]discovery_kit_ap
 			log.Warn().Str("endpoint", ep.URL).Msg("can't get a client.")
 			continue
 		}
-		tgts, err := fn(c)
+		tgts, err := fn(c, targetType)
 		if err != nil {
-			log.Warn().Err(err).Str("endpoint", ep.URL).Msg("handler returned error for endpoint")
+			log.Warn().Err(err).Str("endpoint", ep.URL).Str("target type", targetType).Msg("handler returned error for discovery on endpoint and target")
 			continue
 		}
 		all = append(all, tgts...)
