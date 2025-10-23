@@ -29,6 +29,21 @@ type ExecutionRunData struct {
 	requestSuccessCounter atomic.Uint64              // stores the number of successful requests for each execution
 }
 
+func startReturnsLogger(ch *amqp.Channel, buf int) <-chan amqp.Return {
+	r := ch.NotifyReturn(make(chan amqp.Return, buf))
+	go func() {
+		for ret := range r {
+			log.Warn().
+				Str("exchange", ret.Exchange).
+				Str("routingKey", ret.RoutingKey).
+				Uint16("code", ret.ReplyCode).
+				Str("text", ret.ReplyText).
+				Msg("message returned (unroutable)")
+		}
+	}()
+	return r
+}
+
 var (
 	ExecutionRunDataMap = sync.Map{} //make(map[uuid.UUID]*ExecutionRunData)
 )
@@ -203,17 +218,7 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 	}
 
 	// Always listen for returns to detect unroutable messages
-	returns := ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
-	go func() {
-		for r := range returns {
-			log.Warn().
-				Str("exchange", r.Exchange).
-				Str("routingKey", r.RoutingKey).
-				Uint16("code", r.ReplyCode).
-				Str("text", r.ReplyText).
-				Msg("message returned (unroutable)")
-		}
-	}()
+	_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 
 	// Prepare static publishing data once
 	exchange, routingKey, pubTemplate := createPublishRequest(state)
@@ -238,7 +243,7 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 		if e := ch.Confirm(false); e == nil {
 			confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
 		}
-		returns = ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
+		_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 		return nil
 	}
 
@@ -344,10 +349,16 @@ func stop(state *ProduceMessageAttackState) (*action_kit_api.StopResult, error) 
 		return nil, nil
 	}
 	stopTickers(executionRunData)
+	close(executionRunData.jobs)
 
 	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
 	// calculate the success rate
-	successRate := float64(executionRunData.requestSuccessCounter.Load()) / float64(executionRunData.requestCounter.Load()) * 100
+	var successRate float64
+	if total := executionRunData.requestCounter.Load(); total > 0 {
+		successRate = float64(executionRunData.requestSuccessCounter.Load()) / float64(total) * 100
+	} else {
+		successRate = 0
+	}
 	log.Debug().Msgf("Success Rate: %v%%", successRate)
 	ExecutionRunDataMap.Delete(state.ExecutionID)
 	if successRate < float64(state.SuccessRate) {
