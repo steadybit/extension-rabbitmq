@@ -27,13 +27,14 @@ type ExecutionRunData struct {
 	metrics               chan action_kit_api.Metric // stores the metrics for each execution
 	requestCounter        atomic.Uint64              // stores the number of requests for each execution
 	requestSuccessCounter atomic.Uint64              // stores the number of successful requests for each execution
+	stopOnce              sync.Once                  // ensures ticker stop/close happens once
 }
 
 func startReturnsLogger(ch *amqp.Channel, buf int) <-chan amqp.Return {
 	r := ch.NotifyReturn(make(chan amqp.Return, buf))
 	go func() {
 		for ret := range r {
-			log.Warn().
+			log.Error().
 				Str("exchange", ret.Exchange).
 				Str("routingKey", ret.RoutingKey).
 				Uint16("code", ret.ReplyCode).
@@ -172,8 +173,8 @@ func buildAMQPURL(base, vhost, user, pass string) (string, error) {
 
 func createPublishRequest(state *ProduceMessageAttackState) (exchange string, routingKey string, pub amqp.Publishing) {
 	// Map fields:
-	// - state.RecordValue -> message body
-	// - state.RecordKey   -> routing key (fallback to queue name)
+	// - state.Body -> message body
+	// - state.RoutingKey   -> routing key (fallback to queue name)
 	// - state.Queue       -> routing key fallback
 	// - state.Exchange    -> target exchange (empty string means default exchange)
 
@@ -378,15 +379,11 @@ func stop(state *ProduceMessageAttackState) (*action_kit_api.StopResult, error) 
 }
 
 func stopTickers(executionRunData *ExecutionRunData) {
-	ticker := executionRunData.tickers
-	if ticker != nil {
-		ticker.Stop()
-	}
-	// non-blocking send
-	select {
-	case executionRunData.stopTicker <- true: // stop the ticker
+	executionRunData.stopOnce.Do(func() {
+		if t := executionRunData.tickers; t != nil {
+			t.Stop()
+		}
+		close(executionRunData.stopTicker)
 		log.Trace().Msg("Stopped ticker")
-	default:
-		log.Debug().Msg("Ticker already stopped")
-	}
+	})
 }

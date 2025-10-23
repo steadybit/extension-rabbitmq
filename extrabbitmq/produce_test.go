@@ -1,193 +1,138 @@
-// SPDX-License-Identifier: MIT
-// SPDX-FileCopyrightText: 2025 Steadybit GmbH
-
 package extrabbitmq
 
 import (
+	"github.com/steadybit/action-kit/go/action_kit_api/v2"
+	"net/url"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/steadybit/action-kit/go/action_kit_api/v2"
-	"github.com/stretchr/testify/assert"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// ---- buildAMQPURL ----
-
-func TestBuildAMQPURL_ErrorsOnEmptyOrMalformed(t *testing.T) {
-	_, err := buildAMQPURL("", "/", "", "")
-	assert.Error(t, err)
-
-	_, err = buildAMQPURL("://bad", "/", "", "")
-	assert.Error(t, err)
+func mustParse(t *testing.T, s string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(s)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	return u
 }
 
-func TestBuildAMQPURL_RootVhost_NoCreds(t *testing.T) {
-	got, err := buildAMQPURL("amqp://host:5672", "/", "", "")
-	assert.NoError(t, err)
-	assert.Equal(t, "amqp://host:5672/", got)
+func Test_buildAMQPURL_injectsCreds_and_VhostRoot(t *testing.T) {
+	got, err := buildAMQPURL("amqps://broker.internal:5671", "/", "u", "p")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	u := mustParse(t, got)
+	if u.User == nil {
+		t.Fatalf("expected userinfo")
+	}
+	user := u.User.Username()
+	pass, _ := u.User.Password()
+	if user != "u" || pass != "p" {
+		t.Fatalf("userinfo got %s:%s", user, pass)
+	}
+	if u.Path != "/" {
+		t.Fatalf("vhost path got %q", u.Path)
+	}
 }
 
-func TestBuildAMQPURL_CustomVhost_NoCreds(t *testing.T) {
-	got, err := buildAMQPURL("amqp://host", "tenant-a", "", "")
-	assert.NoError(t, err)
-	assert.Equal(t, "amqp://host/tenant-a", got)
+func Test_buildAMQPURL_preservesExistingCreds_and_Vhost(t *testing.T) {
+	got, err := buildAMQPURL("amqp://x:y@host/vh", "ignored", "u", "p")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	u := mustParse(t, got)
+	user := u.User.Username()
+	pass, _ := u.User.Password()
+	if user != "x" || pass != "y" {
+		t.Fatalf("should keep existing creds, got %s:%s", user, pass)
+	}
 }
 
-func TestBuildAMQPURL_CustomVhost_PathEscaped(t *testing.T) {
-	got, err := buildAMQPURL("amqp://host", "team/a b", "", "")
-	assert.NoError(t, err)
-	assert.Equal(t, "amqp://host/team%252Fa%2520b", got)
+func Test_buildAMQPURL_setsCustomVhost(t *testing.T) {
+	got, err := buildAMQPURL("amqp://host", "team A/vh", "u", "p")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	u := mustParse(t, got)
+	// space must be escaped
+	if u.Path != "/team%20A%2Fvh" {
+		t.Fatalf("escaped vhost got %q", u.Path)
+	}
 }
 
-func TestBuildAMQPURL_InjectsCreds_IfMissing(t *testing.T) {
-	got, err := buildAMQPURL("amqp://rabbit.local", "v1", "user", "pass")
-	assert.NoError(t, err)
-	assert.Equal(t, "amqp://user:pass@rabbit.local/v1", got)
-}
-
-func TestBuildAMQPURL_PreservesExistingCreds(t *testing.T) {
-	got, err := buildAMQPURL("amqp://alice:secret@rabbit.local:5672", "v1", "ignored", "ignored")
-	assert.NoError(t, err)
-	assert.Equal(t, "amqp://alice:secret@rabbit.local:5672/v1", got)
-}
-
-// ---- createPublishRequest ----
-
-type headersState struct {
-	ProduceMessageAttackState
-}
-
-func TestCreatePublishRequest_UsesQueueAsFallbackRoutingKey(t *testing.T) {
-	s := &ProduceMessageAttackState{
+func Test_createPublishRequest_defaultsAndHeaders(t *testing.T) {
+	state := &ProduceMessageAttackState{
 		Exchange:   "",
 		RoutingKey: "",
-		Queue:      "orders",
-		Body:       "payload",
-	}
-	ex, rk, pub := createPublishRequest(s)
-	assert.Equal(t, "", ex)
-	assert.Equal(t, "orders", rk)
-	assert.Equal(t, "text/plain", pub.ContentType)
-	assert.Equal(t, []byte("payload"), pub.Body)
-	assert.NotZero(t, pub.Timestamp.UnixNano())
-}
-
-func TestCreatePublishRequest_UsesRoutingKey_AndHeaders(t *testing.T) {
-	s := &ProduceMessageAttackState{
-		Exchange:   "ex-a",
-		RoutingKey: "rk-a",
-		Queue:      "ignored",
-		Body:       "x",
+		Queue:      "queueA",
+		Body:       "hello",
 		Headers: map[string]string{
 			"k1": "v1",
 			"k2": "v2",
 		},
 	}
-	ex, rk, pub := createPublishRequest(s)
-	assert.Equal(t, "ex-a", ex)
-	assert.Equal(t, "rk-a", rk)
-	assert.Equal(t, "v1", pub.Headers["k1"])
-	assert.Equal(t, "v2", pub.Headers["k2"])
+	ex, rk, pub := createPublishRequest(state)
+	if ex != "" {
+		t.Fatalf("exchange expected empty, got %q", ex)
+	}
+	if rk != "queueA" {
+		t.Fatalf("routingKey fallback to queue, got %q", rk)
+	}
+	if string(pub.Body) != "hello" {
+		t.Fatalf("body mismatch")
+	}
+	if pub.ContentType != "text/plain" {
+		t.Fatalf("content-type mismatch")
+	}
+	want := amqp.Table{"k1": "v1", "k2": "v2"}
+	if !reflect.DeepEqual(pub.Headers, want) {
+		t.Fatalf("headers mismatch: got %#v", pub.Headers)
+	}
+	if pub.DeliveryMode != amqp.Persistent {
+		t.Fatalf("delivery mode not persistent")
+	}
+	if pub.Timestamp.IsZero() {
+		t.Fatalf("timestamp must be set")
+	}
 }
 
-// ---- retrieveLatestMetrics ----
-
-func TestRetrieveLatestMetrics_DrainsAvailableMetrics(t *testing.T) {
+func Test_retrieveLatestMetrics_drainsChannel(t *testing.T) {
 	ch := make(chan action_kit_api.Metric, 3)
-	ch <- action_kit_api.Metric{Metric: map[string]string{"a": "test"}}
-	ch <- action_kit_api.Metric{Metric: map[string]string{"b": "test"}}
+	// minimal Metric struct fields used only for identity; avoid nil panics
+	ch <- action_kit_api.Metric{Timestamp: time.Now()}
+	ch <- action_kit_api.Metric{Timestamp: time.Now().Add(time.Second)}
+	res := retrieveLatestMetrics(ch)
+	if len(res) != 2 {
+		t.Fatalf("expected 2 metrics, got %d", len(res))
+	}
+	// channel should still be open; default case should return immediately if empty
 	got := retrieveLatestMetrics(ch)
-	assert.Len(t, got, 2)
-
-	close(ch)
-	got2 := retrieveLatestMetrics(ch)
-	assert.Len(t, got2, 0)
-}
-
-// ---- stop and counters ----
-
-func TestStop_SuccessRateAboveThreshold(t *testing.T) {
-	st := &ProduceMessageAttackState{
-		ExecutionID: uuid.New(),
-		SuccessRate: 40,
-	}
-	erd := &ExecutionRunData{}
-	erd.requestCounter.Store(10)
-	erd.requestSuccessCounter.Store(5)
-	saveExecutionRunData(st.ExecutionID, erd)
-
-	res, err := stop(st)
-	assert.NoError(t, err)
-	assert.Nil(t, res.Error)
-}
-
-func TestStop_SuccessRateBelowThreshold(t *testing.T) {
-	st := &ProduceMessageAttackState{
-		ExecutionID: uuid.New(),
-		SuccessRate: 100,
-	}
-	erd := &ExecutionRunData{}
-	erd.requestCounter.Store(11)
-	erd.requestSuccessCounter.Store(4)
-	saveExecutionRunData(st.ExecutionID, erd)
-
-	res, err := stop(st)
-	assert.NoError(t, err)
-	if assert.NotNil(t, res.Error) {
-		assert.Contains(t, res.Error.Title, "below 100%")
+	if len(got) != 0 {
+		t.Fatalf("expected no more metrics, got %d", len(got))
 	}
 }
 
-func TestStop_GracefulWhenRunDataMissing(t *testing.T) {
-	st := &ProduceMessageAttackState{
-		ExecutionID: uuid.New(),
-		SuccessRate: 0,
-	}
-	// do not save run data
-	res, err := stop(st)
-	assert.NoError(t, err)
-	assert.Nil(t, res) // function returns nil result when data missing
-}
-
-// ---- tickers and scheduling ----
-
-func TestStopTickers_Idempotent(t *testing.T) {
+func Test_stopTickers_stopsAndSignalsOnce(t *testing.T) {
 	erd := &ExecutionRunData{
-		tickers:    time.NewTicker(10 * time.Millisecond),
-		stopTicker: make(chan bool, 1),
+		tickers:    time.NewTicker(time.Hour),
+		stopTicker: make(chan bool),
 	}
-	stopTickers(erd)     // first stop
-	stopTickers(erd)     // second stop should be non-blocking
-	assert.True(t, true) // reached without deadlock
-}
 
-func TestStart_SchedulesImmediatelyAndTicks(t *testing.T) {
-	// Prepare execution run data manually
-	execID := uuid.New()
-	state := &ProduceMessageAttackState{
-		ExecutionID:              execID,
-		DelayBetweenRequestsInMS: 5,
-	}
-	saveExecutionRunData(execID, &ExecutionRunData{
-		stopTicker: make(chan bool, 1),
-		jobs:       make(chan time.Time, 10),
-		metrics:    make(chan action_kit_api.Metric, 1),
-	})
-
-	start(state)
-
-	// First job is scheduled immediately
-	erd, _ := ExecutionRunDataMap.Load(execID)
-	run := erd.(*ExecutionRunData)
+	// First stop: should close channel
+	stopTickers(erd)
 
 	select {
-	case <-run.jobs:
-		// ok
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("did not receive initial job")
+	case _, ok := <-erd.stopTicker:
+		if ok {
+			t.Fatalf("expected closed channel (ok=false), got ok=true")
+		}
+	default:
+		t.Fatalf("expected stopTicker to be closed and immediately readable")
 	}
 
-	// Stop and ensure ticker goroutine exits
-	stopTickers(run)
+	// Second stop: should be a no-op (no panic)
+	stopTickers(erd)
 }

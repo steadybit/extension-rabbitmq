@@ -130,7 +130,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 			},
 		}),
 		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("5s"),
+			CallInterval: extutil.Ptr("2s"),
 		}),
 	}
 }
