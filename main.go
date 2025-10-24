@@ -76,6 +76,7 @@ func registerHandlers(ctx context.Context) {
 
 	// Checks
 	action_kit_sdk.RegisterAction(extrabbitmq.NewQueueBacklogCheckAction())
+	action_kit_sdk.RegisterAction(extrabbitmq.NewCheckNodesAction())
 
 	// Root index
 	exthttp.RegisterHttpHandler("/", exthttp.GetterAsHandler(getExtensionList))

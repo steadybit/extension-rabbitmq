@@ -85,8 +85,6 @@ func (r *rabbitQueueDiscovery) DiscoverTargets(ctx context.Context) ([]discovery
 	return getAllQueues(ctx)
 }
 
-// --- core listing ---
-
 func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
 		out := make([]discovery_kit_api.Target, 0, 32)

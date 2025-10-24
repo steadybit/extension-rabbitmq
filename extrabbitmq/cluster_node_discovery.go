@@ -60,6 +60,7 @@ func (r *rabbitNodeDiscovery) DescribeTarget() discovery_kit_api.TargetDescripti
 				{Attribute: "rabbitmq.node.type"},
 				{Attribute: "rabbitmq.node.running"},
 				{Attribute: "rabbitmq.cluster.name"},
+				{Attribute: "rabbitmq.mgmt.url"},
 			},
 			OrderBy: []discovery_kit_api.OrderBy{{Attribute: "steadybit.label", Direction: "ASC"}},
 		},
@@ -113,6 +114,7 @@ func toNodeTarget(mgmtURL string, n rabbithole.NodeInfo, clusterName string) dis
 		"rabbitmq.node.type":    {n.NodeType},
 		"rabbitmq.cluster.name": {clusterName},
 		"rabbitmq.node.running": {fmt.Sprintf("%t", n.IsRunning)},
+		"rabbitmq.mgmt.url":     {mgmtURL},
 	}
 
 	return discovery_kit_api.Target{
