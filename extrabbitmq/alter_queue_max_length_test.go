@@ -5,19 +5,23 @@ package extrabbitmq
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
-	"github.com/steadybit/extension-kit/extutil"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAlterQueueMaxLength_Describe(t *testing.T) {
+func TestAlterQueueMaxLength_Describe_Full(t *testing.T) {
 	a := NewAlterQueueMaxLengthAttack()
 	desc := a.Describe()
 
@@ -25,25 +29,27 @@ func TestAlterQueueMaxLength_Describe(t *testing.T) {
 	require.True(t, strings.HasSuffix(desc.Id, ".alter-max-length"))
 	require.Equal(t, "Alter Queue Max Length (Policy)", desc.Label)
 	require.Equal(t, action_kit_api.Attack, desc.Kind)
+
 	require.NotNil(t, desc.TargetSelection)
 	require.Equal(t, queueTargetId, desc.TargetSelection.TargetType)
-	require.NotEmpty(t, desc.Parameters)
-	// ensure parameter "maxLength" exists
-	found := false
+	if desc.TargetSelection.QuantityRestriction == nil {
+		t.Fatalf("QuantityRestriction must be set to ExactlyOne")
+	}
+	require.Equal(t, action_kit_api.QuantityRestrictionExactlyOne, *desc.TargetSelection.QuantityRestriction)
+
+	hasMaxLen := false
 	for _, p := range desc.Parameters {
 		if p.Name == "maxLength" {
-			found = true
+			hasMaxLen = true
 			require.Equal(t, action_kit_api.ActionParameterTypeInteger, p.Type)
-			break
 		}
 	}
-	require.True(t, found, "expected parameter 'maxLength' to be present")
+	require.True(t, hasMaxLen, "expected parameter 'maxLength'")
 }
 
-func TestAlterQueueMaxLength_NewEmptyState(t *testing.T) {
+func TestAlterQueueMaxLength_NewEmptyState_ZeroValues(t *testing.T) {
 	a := NewAlterQueueMaxLengthAttack()
 	state := a.NewEmptyState()
-	// zero-value checks
 	require.Empty(t, state.PolicyName)
 	require.Empty(t, state.Queue)
 	require.Empty(t, state.Vhost)
@@ -58,39 +64,140 @@ func TestAlterQueueMaxLength_Prepare_SetsState(t *testing.T) {
 
 	req := action_kit_api.PrepareActionRequestBody{
 		Config: map[string]interface{}{
-			"duration":  float64(30_000), // 30s in ms
+			"duration":  float64(30_000),
 			"maxLength": float64(123),
 		},
 		Target: &action_kit_api.Target{
-			// these attributes are required by Prepare via MustHaveValue
 			Attributes: map[string][]string{
 				"rabbitmq.queue.name":  {"order"},
-				"rabbitmq.queue.vhost": {"/"},
-				"rabbitmq.mgmt.url":    {"https://mq-0.ns.svc:15671"},
+				"rabbitmq.queue.vhost": {"order-vhost"},
+				"rabbitmq.mgmt.url":    {"http://example:15672"},
 			},
 		},
 	}
 
-	before := time.Now()
+	start := time.Now()
 	_, err := a.Prepare(context.Background(), &state, req)
 	require.NoError(t, err)
 
 	require.Equal(t, 123, state.TargetMaxLength)
 	require.Equal(t, "order", state.Queue)
-	require.Equal(t, "/", state.Vhost)
-	require.Equal(t, "https://mq-0.ns.svc:15671", state.ManagementURL)
-	require.True(t, state.Duration.After(before))
-	require.True(t, state.Duration.Sub(before) >= 29*time.Second) // loose bound
+	require.Equal(t, "order-vhost", state.Vhost)
+	require.Equal(t, "http://example:15672", state.ManagementURL)
+	require.True(t, state.Duration.After(start))
+	require.True(t, state.Duration.Sub(start) >= 29*time.Second)
 }
 
-func TestRabbitsafeRegex_EscapesRegexMeta(t *testing.T) {
-	in := `order.queue+name?*(v1)[test]{a}^$|/pipe`
-	out := rabbitsafeRegex(in)
-	// Ensure all meta characters are escaped literally
-	require.Equal(t, `order\.queue\+name\?\*\(v1\)\[test\]\{a\}\^\$\|\/pipe`, out)
-	// And when we anchor outside this function, it should match literally.
-	pattern := "^" + out + "$"
-	require.Regexp(t, pattern, in)
+func TestAlterQueueMaxLength_Prepare_MissingAttrPanics(t *testing.T) {
+	a := NewAlterQueueMaxLengthAttack()
+	state := a.NewEmptyState()
+	req := action_kit_api.PrepareActionRequestBody{
+		Config: map[string]interface{}{
+			"duration":  float64(10_000),
+			"maxLength": float64(1),
+		},
+		Target: &action_kit_api.Target{Attributes: map[string][]string{
+			// missing queue.vhost and mgmt.url on purpose
+			"rabbitmq.queue.name": {"q"},
+		}},
+	}
+	require.Panics(t, func() {
+		_, _ = a.Prepare(context.Background(), &state, req)
+	})
+}
+
+func TestStart_CreatesPolicy_Success(t *testing.T) {
+	// HTTP fake policy API
+	var putCalled int32
+	var capturedPutPath string
+	var capturedBody map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/policies/"):
+			atomic.AddInt32(&putCalled, 1)
+			capturedPutPath = r.URL.Path
+			defer r.Body.Close()
+			_ = json.NewDecoder(r.Body).Decode(&capturedBody)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	// Wire config so Start() can obtain a management client
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
+		{URL: srv.URL, Username: "u", Password: "p"},
+	}
+
+	// Prepare state
+	a := NewAlterQueueMaxLengthAttack()
+	state := a.NewEmptyState()
+	state.Queue = "order.queue+v1"
+	state.Vhost = "order"
+	state.ManagementURL = srv.URL
+	state.TargetMaxLength = 777
+
+	// Act
+	res, err := a.Start(context.Background(), &state)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotEmpty(t, state.PolicyName) // should be generated
+
+	// Verify PUT request
+	require.Equal(t, int32(1), atomic.LoadInt32(&putCalled))
+	require.Regexp(t, regexp.MustCompile(`/api/policies/order/steadybit-alter-maxlen-order\.queue\+v1-`), capturedPutPath)
+
+	// Body assertions
+	require.Equal(t, "queues", capturedBody["apply-to"])
+	require.EqualValues(t, 0, capturedBody["priority"])
+	require.Regexp(t, `^\^order\\.queue\+v1\$`, capturedBody["pattern"])
+
+	def, ok := capturedBody["definition"].(map[string]any)
+	require.True(t, ok, "definition must be an object")
+	require.EqualValues(t, 777, def["max-length"])
+}
+
+func TestStart_Error_NoEndpointConfigured(t *testing.T) {
+	config.Config.ManagementEndpoints = nil // ensure not found
+	a := NewAlterQueueMaxLengthAttack()
+	state := a.NewEmptyState()
+	state.Queue = "q"
+	state.Vhost = "v"
+	state.ManagementURL = "http://not-in-config"
+	state.TargetMaxLength = 1
+
+	_, err := a.Start(context.Background(), &state)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no management endpoint configured")
+}
+
+func TestStart_Error_PutPolicyFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate broker rejecting policy
+		if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/policies/") {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	config.Config.ManagementEndpoints = []config.ManagementEndpoint{
+		{URL: srv.URL, Username: "u", Password: "p"},
+	}
+
+	a := NewAlterQueueMaxLengthAttack()
+	state := a.NewEmptyState()
+	state.Queue = "q"
+	state.Vhost = "v"
+	state.ManagementURL = srv.URL
+	state.TargetMaxLength = 5
+
+	_, err := a.Start(context.Background(), &state)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to create policy")
 }
 
 func TestSafeDeletePolicy_Success(t *testing.T) {
@@ -130,8 +237,16 @@ func TestSafeDeletePolicy_NotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	err = safeDeletePolicy(c, vhost, name)
-	require.Error(t, err, "expected error when policy is not found")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("policy %s not found in vhost %s", name, vhost))
 }
 
-// Helper to satisfy extutil.MustHaveValue usage in Prepare tests where needed.
-func extStrPtr(s string) *string { return extutil.Ptr(s) }
+func TestRabbitsafeRegex_MetaAndPlain(t *testing.T) {
+	in := `order.queue+name?*(v1)[test]{a}^$|/pipe`
+	out := rabbitsafeRegex(in)
+	require.Equal(t, `order\.queue\+name\?\*$begin:math:text$v1$end:math:text$$begin:math:display$test$end:math:display$\{a\}\^\$\|\/pipe`, out)
+	require.Regexp(t, "^"+out+"$", in)
+
+	// idempotent on alphanumeric
+	require.Equal(t, "abc123", rabbitsafeRegex("abc123"))
+}

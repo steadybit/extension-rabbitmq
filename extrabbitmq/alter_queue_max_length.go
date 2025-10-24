@@ -23,15 +23,12 @@ import (
 type AlterQueueMaxLengthAttack struct{}
 
 type AlterQueueMaxLengthState struct {
-	// runtime
-	PolicyName string `json:"policyName,omitempty"`
-
-	// inputs / intent
-	Queue           string    `json:"queue,omitempty"`
-	Vhost           string    `json:"vhost,omitempty"`
-	ManagementURL   string    `json:"managementUrl,omitempty"`
-	TargetMaxLength int       `json:"targetMaxLength,omitempty"`
-	Duration        time.Time `json:"end,omitempty"`
+	PolicyName      string
+	Queue           string
+	Vhost           string
+	ManagementURL   string
+	TargetMaxLength int
+	Duration        time.Time
 
 	// store existing policy snapshots (if we want to restore — optional)
 	// For simplicity we only delete policies we created on Stop.
