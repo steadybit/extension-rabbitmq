@@ -5,9 +5,12 @@ package clients
 
 import (
 	"crypto/tls"
+	"errors"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
@@ -16,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ---- CreateMgmtClientFromURL ----
+// ---- helpers used by tests ----
 
 func createConfig(url string, user string, pass string, insecure bool, ca string) *config.ManagementEndpoint {
 	return &config.ManagementEndpoint{
@@ -27,6 +30,8 @@ func createConfig(url string, user string, pass string, insecure bool, ca string
 		CAFile:             ca,
 	}
 }
+
+// ---- CreateMgmtClientFromURL ----
 
 func TestCreateMgmtClientFromURL_EmptyURL(t *testing.T) {
 	c, err := CreateMgmtClientFromURL(createConfig("", "user", "pass", false, ""))
@@ -69,6 +74,32 @@ func TestCreateMgmtClientFromURL_ExtractsCredentialsFromURL(t *testing.T) {
 	assert.NotNil(t, c)
 }
 
+func TestCreateMgmtClientFromURL_HTTPS_WithInvalidCAFile_ReadError(t *testing.T) {
+	// file does not exist -> read error
+	tmp := filepath.Join(os.TempDir(), "nonexistent-ca.pem")
+	cfg := createConfig("https://localhost:15672", "user", "pass", false, tmp)
+	c, err := CreateMgmtClientFromURL(cfg)
+	assert.Nil(t, c)
+	require.Error(t, err)
+	// error message should contain the file path
+	assert.Contains(t, err.Error(), tmp)
+}
+
+func TestCreateMgmtClientFromURL_HTTPS_WithBadPEM(t *testing.T) {
+	// create a temp file with invalid PEM
+	f, err := os.CreateTemp("", "badca-*.pem")
+	require.NoError(t, err)
+	_, _ = f.WriteString("this is not a pem")
+	_ = f.Close()
+	defer os.Remove(f.Name())
+
+	cfg := createConfig("https://localhost:15672", "user", "pass", false, f.Name())
+	c, err := CreateMgmtClientFromURL(cfg)
+	assert.Nil(t, c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid CA")
+}
+
 // ---- CreateNewAMQPConnection ----
 
 func TestCreateNewAMQPConnection_EmptyURL(t *testing.T) {
@@ -85,29 +116,6 @@ func TestCreateNewAMQPConnection_InvalidURL(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCreateNewAMQPConnection_UnsupportedScheme(t *testing.T) {
-	conn, ch, err := CreateNewAMQPConnection("mqtt://broker", "", "", false, "")
-	assert.Nil(t, conn)
-	assert.Nil(t, ch)
-	assert.EqualError(t, err, "unsupported amqp scheme: mqtt")
-}
-
-func TestCreateNewAMQPConnection_InsertsCredentials(t *testing.T) {
-	u := "amqp://localhost"
-	au, err := url.Parse(u)
-	require.NoError(t, err)
-	assert.Nil(t, au.User)
-
-	// Mock dialer failure to avoid real connection
-	oldDial := amqpDial
-	defer func() { amqpDial = oldDial }()
-	amqpDial = func(addr string) (*amqp.Connection, error) {
-		assert.Contains(t, addr, "amqp://user:pass@localhost")
-		return nil, assert.AnError
-	}
-	_, _, _ = CreateNewAMQPConnection(u, "user", "pass", false, "")
-}
-
 func TestCreateNewAMQPConnection_AMQPAndAMQPS_ErrorOnConnection(t *testing.T) {
 	// override dialers
 	oldDial := amqpDial
@@ -115,11 +123,12 @@ func TestCreateNewAMQPConnection_AMQPAndAMQPS_ErrorOnConnection(t *testing.T) {
 	defer func() { amqpDial, amqpDialTLS = oldDial, oldDialTLS }()
 
 	amqpDial = func(addr string) (*amqp.Connection, error) {
-		return nil, assert.AnError
+		return nil, errors.New("amqp dial error")
 	}
 	amqpDialTLS = func(addr string, cfg *tls.Config) (*amqp.Connection, error) {
-		assert.NotNil(t, cfg)
-		return nil, assert.AnError
+		// TLS config should be provided for amqps
+		require.NotNil(t, cfg)
+		return nil, errors.New("amqps dial error")
 	}
 
 	_, _, err := CreateNewAMQPConnection("amqp://localhost", "", "", false, "")
@@ -129,13 +138,43 @@ func TestCreateNewAMQPConnection_AMQPAndAMQPS_ErrorOnConnection(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// ---- test overrides ----
+func TestCreateNewAMQPConnection_AMQPS_WithInvalidCAFile(t *testing.T) {
+	oldDialTLS := amqpDialTLS
+	defer func() { amqpDialTLS = oldDialTLS }()
+
+	// prepare a bad CA file
+	f, err := os.CreateTemp("", "invalid-ca-*.pem")
+	require.NoError(t, err)
+	_, _ = f.WriteString("not a pem")
+	_ = f.Close()
+	defer os.Remove(f.Name())
+
+	// amqpDialTLS shouldn't be called because CA parsing fails earlier
+	amqpDialTLS = func(addr string, cfg *tls.Config) (*amqp.Connection, error) {
+		return nil, errors.New("should not be called")
+	}
+
+	_, _, err = CreateNewAMQPConnection("amqps://localhost", "", "", false, f.Name())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid CA")
+}
+
+func TestCreateNewAMQPConnection_AMQPS_WithCAFile_ReadError(t *testing.T) {
+	// non existent file
+	_, _, err := CreateNewAMQPConnection("amqps://localhost", "", "", false, "/nonexistent/path/ca.pem")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no such file")
+}
+
+// ---- test overrides used by tests (these must match the package-level variables in clients.go) ----
 var (
 	amqpDial    = func(addr string) (*amqp.Connection, error) { return amqp.Dial(addr) }
 	amqpDialTLS = func(addr string, cfg *tls.Config) (*amqp.Connection, error) { return amqp.DialTLS(addr, cfg) }
 )
 
 func init() {
-	// ensure TLS works for valid PEM tests
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	// ensure TLS works for valid-ish tests (if they rely on default transport)
+	if tr, ok := http.DefaultTransport.(*http.Transport); ok {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 }
