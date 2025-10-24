@@ -24,9 +24,6 @@ const (
 	vhostTargetId = "com.steadybit.extension_rabbitmq.vhost"
 )
 
-// Discovery implementation
-const defaultVhostDiscoveryIntervalSeconds = 60
-
 type rabbitVhostDiscovery struct{}
 
 var _ discovery_kit_sdk.TargetDescriber = (*rabbitVhostDiscovery)(nil)
@@ -37,7 +34,7 @@ func NewRabbitVhostDiscovery(ctx context.Context) discovery_kit_sdk.TargetDiscov
 	return discovery_kit_sdk.NewCachedTargetDiscovery(
 		d,
 		discovery_kit_sdk.WithRefreshTargetsNow(),
-		discovery_kit_sdk.WithRefreshTargetsInterval(ctx, defaultVhostDiscoveryIntervalSeconds*time.Second),
+		discovery_kit_sdk.WithRefreshTargetsInterval(ctx, time.Duration(config.Config.DiscoveryIntervalVhostSeconds)*time.Second),
 	)
 }
 
@@ -45,7 +42,7 @@ func (r *rabbitVhostDiscovery) Describe() discovery_kit_api.DiscoveryDescription
 	return discovery_kit_api.DiscoveryDescription{
 		Id: vhostTargetId,
 		Discover: discovery_kit_api.DescribingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", defaultVhostDiscoveryIntervalSeconds)),
+			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", config.Config.DiscoveryIntervalVhostSeconds)),
 		},
 	}
 }

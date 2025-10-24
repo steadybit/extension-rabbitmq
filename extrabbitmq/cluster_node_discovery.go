@@ -6,6 +6,7 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
+	"github.com/steadybit/extension-rabbitmq/config"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -19,8 +20,7 @@ import (
 )
 
 const (
-	nodeTargetId   = "com.steadybit.extension_rabbitmq.node"
-	nodeRefreshSec = 60
+	nodeTargetId = "com.steadybit.extension_rabbitmq.node"
 )
 
 type rabbitNodeDiscovery struct{}
@@ -33,7 +33,7 @@ func NewRabbitNodeDiscovery(ctx context.Context) discovery_kit_sdk.TargetDiscove
 	return discovery_kit_sdk.NewCachedTargetDiscovery(
 		d,
 		discovery_kit_sdk.WithRefreshTargetsNow(),
-		discovery_kit_sdk.WithRefreshTargetsInterval(ctx, nodeRefreshSec*time.Second),
+		discovery_kit_sdk.WithRefreshTargetsInterval(ctx, time.Duration(config.Config.DiscoveryIntervalNodeSeconds)*time.Second),
 	)
 }
 
@@ -41,7 +41,7 @@ func (r *rabbitNodeDiscovery) Describe() discovery_kit_api.DiscoveryDescription 
 	return discovery_kit_api.DiscoveryDescription{
 		Id: nodeTargetId,
 		Discover: discovery_kit_api.DescribingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", nodeRefreshSec)),
+			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", config.Config.DiscoveryIntervalNodeSeconds)),
 		},
 	}
 }
@@ -105,7 +105,7 @@ func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	if err != nil {
 		log.Warn().Err(err).Msg("node discovery encountered errors")
 	}
-	return discovery_kit_commons.ApplyAttributeExcludes(targets, nil), nil
+	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesNodes), nil
 }
 
 func toNodeTarget(mgmtURL string, n rabbithole.NodeInfo, clusterName string) discovery_kit_api.Target {

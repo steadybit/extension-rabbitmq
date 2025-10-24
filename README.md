@@ -7,7 +7,8 @@ our [Reliability Hub](https://hub.steadybit.com/extension/com.steadybit.extensio
 
 ## Prerequisites
 
-The extension-rabbitmq is using these capacities through management endpoint and ampq endpoint, thus may need elevated rights on rabbitmq side :
+The extension-rabbitmq is using these capacities through management endpoint and ampq endpoint, thus may need elevated
+rights on rabbitmq side :
 
 - List Queues
 - Get Queue Metrics
@@ -18,15 +19,15 @@ The extension-rabbitmq is using these capacities through management endpoint and
 
 ## Configuration
 
-| Environment Variable                                       | Helm value                                 | Meaning                                                                                                                                                                                               | Required | Default |
-|------------------------------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
-| `STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON`            | `rabbitmq.managementEndpoints`             | JSON array describing all RabbitMQ clusters and their management and AMQP endpoints. Each object must include `url`, `username`, `password`, and an `amqp` object with its own connection parameters. | yes      |         |
-|                                                            |                                            | Example:<br>`[{"url":"https://mq-0.ns.svc:15672","username":"admin","password":"s3cr3t","amqp":{"url":"amqps://mq-0.ns.svc:5671","vhost":"/","insecureSkipVerify":false}}]`                           |          |         | | no       |         |
-| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_RABBIT_BROKER`     | `discovery.interval.rabbitBroker`          | Interval (in seconds) for discovering RabbitMQ cluster nodes.                                                                                                                                         | no       | `30`    |
-| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_RABBIT_VHOST`      | `discovery.interval.rabbitVhost`           | Interval (in seconds) for discovering RabbitMQ vhosts.                                                                                                                                                | no       | `30`    |
-| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_RABBIT_QUEUE`      | `discovery.interval.rabbitQueue`           | Interval (in seconds) for discovering RabbitMQ queues.                                                                                                                                                | no       | `30`    |
-| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_VHOSTS` | `discovery.attributes.excludes.vhost`      | List of Vhost attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
-| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES` | `discovery.attributes.excludes.queue`      | List of Queue attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
+| Environment Variable                                       | Helm value                            | Meaning                                                                                                                                                                                               | Required | Default |
+|------------------------------------------------------------|---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
+| `STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON`            | `rabbitmq.managementEndpoints`        | JSON array describing all RabbitMQ clusters and their management and AMQP endpoints. Each object must include `url`, `username`, `password`, and an `amqp` object with its own connection parameters. | yes      |         |
+|                                                            |                                       | Example:<br>`[{"url":"https://mq-0.ns.svc:15672","username":"admin","password":"s3cr3t","amqp":{"url":"amqps://mq-0.ns.svc:5671","vhost":"/","insecureSkipVerify":false}}]`                           |          |         | | no       |         |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS`     | `discovery.interval.vhost`            | Interval (in seconds) for discovering RabbitMQ cluster nodes.                                                                                                                                         | no       | `30`    |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS`      | `discovery.interval.node`             | Interval (in seconds) for discovering RabbitMQ vhosts.                                                                                                                                                | no       | `30`    |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS`     | `discovery.interval.queue`            | Interval (in seconds) for discovering RabbitMQ queues.                                                                                                                                                | no       | `120`   |
+| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_VHOSTS` | `discovery.attributes.excludes.vhost` | List of Vhost attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
+| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES` | `discovery.attributes.excludes.queue` | List of Queue attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
 
 The extension supports all environment variables provided
 by [steadybit/extension-kit](https://github.com/steadybit/extension-kit#environment-variables).

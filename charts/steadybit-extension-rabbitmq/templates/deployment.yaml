@@ -55,21 +55,36 @@ spec:
               memory: {{ .Values.resources.limits.memory }}
               cpu: {{ .Values.resources.limits.cpu }}
           env:
-            {{- if .Values.discovery.attributes.excludes.robot }}
-            - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_ROBOT
-              value: {{ join "," .Values.discovery.attributes.excludes.robot | quote }}
+            {{- if .Values.discovery.attributes.excludes.node }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_NODES
+              value: {{ join "," .Values.discovery.attributes.excludes.node | quote }}
+            {{- end }}
+            {{- if .Values.discovery.attributes.excludes.vhost }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_VHOSTS
+              value: {{ join "," .Values.discovery.attributes.excludes.vhost | quote }}
+            {{- end }}
+            {{- if .Values.discovery.attributes.excludes.queue }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES
+              value: {{ join "," .Values.discovery.attributes.excludes.queue | quote }}
+            {{- end }}
+            {{- if .Values.discovery.interval.node }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+              value: {{ .Values.discovery.interval.node | quote }}
+            {{- end }}
+            {{- if .Values.discovery.interval.vhost }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+              value: {{ .Values.discovery.interval.vhost | quote }}
+            {{- end }}
+            {{- if .Values.discovery.interval.queue }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+              value: {{ .Values.discovery.interval.queue | quote }}
             {{- end }}
             {{- /* RabbitMQ management endpoints JSON from Secret or values */}}
-            {{- if .Values.rabbitmq.auth.secretName }}
             - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.rabbitmq.auth.secretName }}
-                  key: {{ default "managementEndpointsJson" .Values.rabbitmq.auth.secretKey }}
-            {{- else if .Values.rabbitmq.auth.managementEndpoints }}
-            - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
-              value: {{ .Values.rabbitmq.auth.managementEndpoints | toJson | quote }}
-            {{- end }}
+                  name: {{ include "rabbitmq.auth.secret.name" . }}
+                  key: managementEndpointsJson
             {{- include "extensionlib.deployment.env" (list .) | nindent 12 }}
             {{- with .Values.extraEnv }}
               {{- toYaml . | nindent 12 }}

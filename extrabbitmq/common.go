@@ -53,7 +53,7 @@ var (
 	}
 	durationAlter = action_kit_api.ActionParameter{
 		Label:        "Duration",
-		Description:  extutil.Ptr("The duration of the action. The broker configuration will be reverted at the end of the action."),
+		Description:  extutil.Ptr("The duration of the action. The policy will be reverted at the end of the action."),
 		Name:         "duration",
 		Type:         action_kit_api.ActionParameterTypeDuration,
 		DefaultValue: extutil.Ptr("60s"),

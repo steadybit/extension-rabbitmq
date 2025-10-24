@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	queueTargetId   = "com.steadybit.extension_rabbitmq.queue"
-	queueRefreshSec = 60
+	queueTargetId = "com.steadybit.extension_rabbitmq.queue"
 )
 
 type rabbitQueueDiscovery struct{}
@@ -32,7 +31,7 @@ func NewRabbitQueueDiscovery(ctx context.Context) discovery_kit_sdk.TargetDiscov
 	return discovery_kit_sdk.NewCachedTargetDiscovery(
 		d,
 		discovery_kit_sdk.WithRefreshTargetsNow(),
-		discovery_kit_sdk.WithRefreshTargetsInterval(ctx, queueRefreshSec*time.Second),
+		discovery_kit_sdk.WithRefreshTargetsInterval(ctx, time.Duration(config.Config.DiscoveryIntervalQueueSeconds)*time.Second),
 	)
 }
 
@@ -40,7 +39,7 @@ func (r *rabbitQueueDiscovery) Describe() discovery_kit_api.DiscoveryDescription
 	return discovery_kit_api.DiscoveryDescription{
 		Id: queueTargetId,
 		Discover: discovery_kit_api.DescribingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", queueRefreshSec)),
+			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", config.Config.DiscoveryIntervalQueueSeconds)),
 		},
 	}
 }

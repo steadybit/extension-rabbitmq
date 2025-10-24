@@ -151,8 +151,17 @@ extraEnvFrom: []
 discovery:
   attributes:
     excludes:
-      # discovery.attributes.excludes.robot -- List of attributes to exclude from Robot discovery.
-      robot: []
+      # discovery.attributes.excludes.node -- List of attributes to exclude from RabbitMQ Node discovery.
+      node: []
+      # discovery.attributes.excludes.vhost -- List of attributes to exclude from RabbitMQ Vhost discovery.
+      vhost: []
+      # discovery.attributes.excludes.queue -- List of attributes to exclude from RabbitMQ Queue discovery.
+      queue: []
+  interval:
+    # Adjust intervals based on the volumetry of your targets.
+    node: 30
+    vhost: 30
+    queue: 120
 
 
 

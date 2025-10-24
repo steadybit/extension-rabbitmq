@@ -28,6 +28,17 @@ manifest should match snapshot using podAnnotations and Labels:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -101,6 +112,17 @@ manifest should match snapshot with TLS:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -185,6 +207,17 @@ manifest should match snapshot with extra env vars:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -267,6 +300,17 @@ manifest should match snapshot with extra labels:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -340,6 +384,17 @@ manifest should match snapshot with mutual TLS:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -433,6 +488,17 @@ manifest should match snapshot with mutual TLS using containerPaths:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -512,6 +578,17 @@ manifest should match snapshot with podSecurityContext:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -586,6 +663,17 @@ manifest should match snapshot with priority class:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT
@@ -660,6 +748,17 @@ manifest should match snapshot without TLS:
         spec:
           containers:
             - env:
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
+                  value: "30"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
+                  valueFrom:
+                    secretKeyRef:
+                      key: managementEndpointsJson
+                      name: steadybit-extension-rabbitmq
                 - name: STEADYBIT_LOG_LEVEL
                   value: INFO
                 - name: STEADYBIT_LOG_FORMAT

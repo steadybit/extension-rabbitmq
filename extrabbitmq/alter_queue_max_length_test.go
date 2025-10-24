@@ -174,7 +174,6 @@ func TestStart_Error_NoEndpointConfigured(t *testing.T) {
 
 func TestStart_Error_PutPolicyFails(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate broker rejecting policy
 		if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/policies/") {
 			http.Error(w, "boom", http.StatusInternalServerError)
 			return

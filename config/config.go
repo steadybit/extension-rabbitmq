@@ -45,11 +45,12 @@ type Specification struct {
 	RabbitClusterCaFile        string `json:"rabbitClusterCaFile" required:"false" split_words:"true"`
 
 	// Discovery
-	DiscoveryIntervalConsumerGroup    int      `json:"discoveryIntervalrabbitConsumerGroup" split_words:"true" required:"false" default:"30"`
-	DiscoveryIntervalrabbitBroker     int      `json:"discoveryIntervalrabbitBroker" split_words:"true" required:"false" default:"30"`
-	DiscoveryIntervalrabbitTopic      int      `json:"discoveryIntervalrabbitTopic" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalVhostSeconds     int      `json:"discoveryIntervalVhostSeconds" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalNodeSeconds      int      `json:"discoveryIntervalNodeSeconds" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalQueueSeconds     int      `json:"discoveryIntervalQueueSeconds" split_words:"true" required:"false" default:"120"`
 	DiscoveryAttributesExcludesVhosts []string `json:"discoveryAttributesExcludesVhosts" split_words:"true" required:"false"`
 	DiscoveryAttributesExcludesQueues []string `json:"discoveryAttributesExcludesQueues" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesNodes  []string `json:"discoveryAttributesExcludesNodes" split_words:"true" required:"false"`
 }
 
 var (
