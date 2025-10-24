@@ -6,6 +6,7 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -42,6 +43,43 @@ func NewAlterQueueMaxLengthAttack() action_kit_sdk.Action[AlterQueueMaxLengthSta
 
 func (a *AlterQueueMaxLengthAttack) NewEmptyState() AlterQueueMaxLengthState {
 	return AlterQueueMaxLengthState{}
+}
+
+// highestPriorityForQueue scans existing policies in a vhost and returns the
+// highest priority among policies that would apply to the given queue name.
+// We consider policies with ApplyTo == "queues" or "all" or "" (unspecified),
+// and whose regex Pattern matches the queue name.
+func highestPriorityForQueue(c *rabbithole.Client, vhost, queue string) (int, error) {
+	policies, err := c.ListPoliciesIn(vhost)
+	if err != nil {
+		return 0, err
+	}
+	max := 0
+	found := false
+	for _, p := range policies {
+		// Only policies that could affect queues
+		if p.ApplyTo != "" && p.ApplyTo != "queues" && p.ApplyTo != "all" {
+			continue
+		}
+		if p.Pattern == "" {
+			continue
+		}
+		re, err := regexp.Compile(p.Pattern)
+		if err != nil {
+			// Ignore invalid policy regexes rather than failing
+			continue
+		}
+		if re.MatchString(queue) {
+			found = true
+			if p.Priority > max {
+				max = p.Priority
+			}
+		}
+	}
+	if !found {
+		return 0, nil
+	}
+	return max, nil
 }
 
 func (a *AlterQueueMaxLengthAttack) Describe() action_kit_api.ActionDescription {
@@ -114,11 +152,19 @@ func (a *AlterQueueMaxLengthAttack) Start(ctx context.Context, state *AlterQueue
 		"max-length": state.TargetMaxLength,
 	}
 
+	// Determine a priority higher than any existing policy that matches this queue
+	highest, err := highestPriorityForQueue(client, state.Vhost, state.Queue)
+	if err != nil {
+		// Do not proceed with an unknown priority situation
+		return nil, fmt.Errorf("failed to list policies in vhost %s: %w", state.Vhost, err)
+	}
+	desiredPriority := highest + 1
+
 	// rabbithole client: PutPolicy(vhost, name, policy)
 	policy := rabbithole.Policy{
 		Pattern:    pattern,
 		Definition: def,
-		Priority:   0,
+		Priority:   desiredPriority,
 		ApplyTo:    "queues",
 	}
 	if _, err = client.PutPolicy(state.Vhost, policyName, policy); err != nil {
@@ -128,7 +174,13 @@ func (a *AlterQueueMaxLengthAttack) Start(ctx context.Context, state *AlterQueue
 		return nil, fmt.Errorf("failed to create policy for queue %s: %w", state.Queue, err)
 	}
 
-	log.Info().Str("vhost", state.Vhost).Str("queue", state.Queue).Str("policy", policyName).Int("maxLength", state.TargetMaxLength).Msg("created policy")
+	log.Info().
+		Str("vhost", state.Vhost).
+		Str("queue", state.Queue).
+		Str("policy", policyName).
+		Int("maxLength", state.TargetMaxLength).
+		Int("priority", desiredPriority).
+		Msg("created policy")
 
 	state.PolicyName = policyName
 
