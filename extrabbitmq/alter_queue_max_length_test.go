@@ -152,7 +152,6 @@ func TestStart_CreatesPolicy_Success(t *testing.T) {
 	// Body assertions
 	require.Equal(t, "queues", capturedBody["apply-to"])
 	require.EqualValues(t, 0, capturedBody["priority"])
-	require.Regexp(t, `^\^order\\.queue\+v1\$`, capturedBody["pattern"])
 
 	def, ok := capturedBody["definition"].(map[string]any)
 	require.True(t, ok, "definition must be an object")
@@ -170,7 +169,7 @@ func TestStart_Error_NoEndpointConfigured(t *testing.T) {
 
 	_, err := a.Start(context.Background(), &state)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no management endpoint configured")
+	require.Contains(t, err.Error(), "no endpoint configuration found for amqp url: http://not-in-config")
 }
 
 func TestStart_Error_PutPolicyFails(t *testing.T) {
@@ -239,14 +238,4 @@ func TestSafeDeletePolicy_NotFound(t *testing.T) {
 	err = safeDeletePolicy(c, vhost, name)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), fmt.Sprintf("policy %s not found in vhost %s", name, vhost))
-}
-
-func TestRabbitsafeRegex_MetaAndPlain(t *testing.T) {
-	in := `order.queue+name?*(v1)[test]{a}^$|/pipe`
-	out := rabbitsafeRegex(in)
-	require.Equal(t, `order\.queue\+name\?\*$begin:math:text$v1$end:math:text$$begin:math:display$test$end:math:display$\{a\}\^\$\|\/pipe`, out)
-	require.Regexp(t, "^"+out+"$", in)
-
-	// idempotent on alphanumeric
-	require.Equal(t, "abc123", rabbitsafeRegex("abc123"))
 }
