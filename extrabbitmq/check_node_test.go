@@ -4,6 +4,7 @@
 package extrabbitmq
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -11,23 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func Test_stringsJoinSafe(t *testing.T) {
-	t.Run("empty", func(t *testing.T) {
-		out := stringsJoinSafe(nil, ",")
-		assert.Equal(t, "", out)
-	})
-
-	t.Run("single", func(t *testing.T) {
-		out := stringsJoinSafe([]string{"one"}, ",")
-		assert.Equal(t, "one", out)
-	})
-
-	t.Run("multiple", func(t *testing.T) {
-		out := stringsJoinSafe([]string{"a", "b", "c"}, ",")
-		assert.Equal(t, "a,b,c", out)
-	})
-}
 
 func Test_toNodeChangeMetric_NoChanges(t *testing.T) {
 	ts := time.Now()
@@ -61,7 +45,7 @@ func Test_toNodeChangeMetric_ExpectedChangePresent_setsSuccess(t *testing.T) {
 
 	assert.Equal(t, "success", m.Metric["state"])
 	assert.Equal(t, "https://rmq", m.Metric["url"])
-	assert.Equal(t, "Expected: "+stringsJoinSafe(expected, ","), m.Metric["metric.id"])
+	assert.Equal(t, "Expected: "+strings.Join(expected, ","), m.Metric["metric.id"])
 
 	// Tooltip must include section headers and sorted values
 	tt := m.Metric["tooltip"]

@@ -10,6 +10,7 @@ import (
 	"github.com/steadybit/extension-rabbitmq/config"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
@@ -26,9 +27,7 @@ const (
 	rabbitNodeTargetId = "com.steadybit.extension_rabbitmq.node"
 
 	NodeDown           = "rabbitmq node down"
-	ControllerChanged  = "rabbitmq controller changed" // optional: based on running 'disc' node leading; can be omitted
 	ClusterNameChanged = "rabbitmq cluster name changed"
-	QueueQuorumAtRisk  = "rabbitmq quorum at risk" // reported only when enabled & detected
 
 	// reuse the same values you already use elsewhere
 	stateCheckModeAllTheTime  = "all-time"
@@ -234,15 +233,6 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		}
 	}
 
-	// if a node disappeared entirely, mark as down too
-	for name, was := range state.BaselineRunning {
-		if was {
-			if _, ok := current[name]; !ok {
-				changes[NodeDown] = append(changes[NodeDown], name)
-			}
-		}
-	}
-
 	// expected change evaluation
 	completed := now.After(state.End)
 	var checkErr *action_kit_api.ActionKitError
@@ -327,7 +317,7 @@ func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes 
 	return extutil.Ptr(action_kit_api.Metric{
 		Name: extutil.Ptr("rabbit_node_state"),
 		Metric: map[string]string{
-			"metric.id": fmt.Sprintf("Expected: %s", stringsJoinSafe(expected, ",")),
+			"metric.id": fmt.Sprintf(" Expected: %s", strings.Join(expected, ",")),
 			"url":       mgmtURL,
 			"state":     st,
 			"tooltip":   tooltip,
@@ -335,27 +325,4 @@ func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes 
 		Timestamp: ts,
 		Value:     0,
 	})
-}
-
-func stringsJoinSafe(v []string, sep string) string {
-	if len(v) == 0 {
-		return ""
-	}
-	if len(v) == 1 {
-		return v[0]
-	}
-	// minimal alloc join to avoid importing strings just for this
-	n := 0
-	for _, s := range v {
-		n += len(s)
-	}
-	n += (len(v) - 1) * len(sep)
-	b := make([]byte, 0, n)
-	for i, s := range v {
-		if i > 0 {
-			b = append(b, sep...)
-		}
-		b = append(b, s...)
-	}
-	return string(b)
 }
