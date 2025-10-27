@@ -51,8 +51,8 @@ func Test_toNodeChangeMetric_ExpectedChangePresent_setsSuccess(t *testing.T) {
 	tt := m.Metric["tooltip"]
 	assert.Contains(t, tt, "NODE ACTIVITY")
 	// keys are sorted lexicographically; ClusterNameChanged before NodeDown
-	firstIdx := findIndex(tt, "cluster name changed:\n")
-	secondIdx := findIndex(tt, "node down:\n")
+	firstIdx := findIndex(tt, "Cluster name changed:\n")
+	secondIdx := findIndex(tt, "Node down:\n")
 	require.NotEqual(t, -1, firstIdx)
 	require.NotEqual(t, -1, secondIdx)
 	assert.Less(t, firstIdx, secondIdx, "cluster section should appear before node section")
@@ -77,7 +77,7 @@ func Test_toNodeChangeMetric_UnexpectedChange_setsWarn(t *testing.T) {
 	require.NotNil(t, m)
 	assert.Equal(t, "warn", m.Metric["state"])
 	assert.Contains(t, m.Metric["tooltip"], "NODE ACTIVITY")
-	assert.Contains(t, m.Metric["tooltip"], "node down:")
+	assert.Contains(t, m.Metric["tooltip"], "Node down:")
 	assert.Contains(t, m.Metric["tooltip"], "rabbit@a")
 }
 
