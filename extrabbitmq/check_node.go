@@ -214,7 +214,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 	// detect changes
 	changes := map[string][]string{}
 
-	if curCluster != state.BaselineCluster {
+	if curCluster != "" && curCluster != state.BaselineCluster {
 		changes[ClusterNameChanged] = []string{fmt.Sprintf("%s -> %s", state.BaselineCluster, curCluster)}
 	}
 
@@ -226,11 +226,11 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 			if was, ok := state.BaselineRunning[name]; ok && was {
 				changes[NodeDown] = append(changes[NodeDown], name)
 			}
-			continue
-		}
-		current[n.Name] = n.IsRunning
-		if was, ok := state.BaselineRunning[n.Name]; ok && was && !n.IsRunning {
-			changes[NodeDown] = append(changes[NodeDown], n.Name)
+		} else {
+			current[n.Name] = n.IsRunning
+			if was, ok := state.BaselineRunning[n.Name]; ok && was && !n.IsRunning {
+				changes[NodeDown] = append(changes[NodeDown], n.Name)
+			}
 		}
 	}
 

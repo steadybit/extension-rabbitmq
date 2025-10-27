@@ -27,7 +27,7 @@ func TestAlterQueueMaxLength_Describe_Full(t *testing.T) {
 
 	require.NotEmpty(t, desc.Id)
 	require.True(t, strings.HasSuffix(desc.Id, ".alter-max-length"))
-	require.Equal(t, "Alter Queue Max Length (Policy)", desc.Label)
+	require.Equal(t, "Alter Queue Max Length", desc.Label)
 	require.Equal(t, action_kit_api.Attack, desc.Kind)
 
 	require.NotNil(t, desc.TargetSelection)

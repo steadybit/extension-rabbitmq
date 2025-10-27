@@ -85,7 +85,7 @@ func highestPriorityForQueue(c *rabbithole.Client, vhost, queue string) (int, er
 func (a *AlterQueueMaxLengthAttack) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
 		Id:          fmt.Sprintf("%s.alter-max-length", queueTargetId),
-		Label:       "Alter Queue Max Length (Policy)",
+		Label:       "Alter Queue Max Length",
 		Description: "Dynamically set a queue max length via a RabbitMQ policy. Creates a policy that matches the target queue and deletes it on stop.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        extutil.Ptr(rabbitMQIcon),
