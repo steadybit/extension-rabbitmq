@@ -317,7 +317,7 @@ func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes 
 	return extutil.Ptr(action_kit_api.Metric{
 		Name: extutil.Ptr("rabbit_node_state"),
 		Metric: map[string]string{
-			"metric.id": fmt.Sprintf(" Expected: %s", strings.Join(expected, ",")),
+			"metric.id": fmt.Sprintf("Expected: %s", strings.Join(expected, ",")),
 			"url":       mgmtURL,
 			"state":     st,
 			"tooltip":   tooltip,
