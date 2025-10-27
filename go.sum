@@ -158,10 +158,6 @@ github.com/steadybit/event-kit/go/event_kit_api v1.6.0 h1:MZbVVLOPQn46enR3RjWglg
 github.com/steadybit/event-kit/go/event_kit_api v1.6.0/go.mod h1:XKfKcyouAOPW3TVr4sT253kJI9rYlzfy5yER1r7p8VU=
 github.com/steadybit/extension-kit v1.10.0 h1:sOeMsGwYT+9v+U+tzUxy6xLMEH2h2qVw3uzgTWhnNpk=
 github.com/steadybit/extension-kit v1.10.0/go.mod h1:Ow1kVKhBQwLGOrBRPSdGDDVdVBgaMDFjpxPV3FeoHho=
-github.com/steadybit/preflight-kit/go/preflight_kit_api v1.2.0 h1:oyO7aIZ8evWoDiO9UFUfo07BIv0i4LTPjc5ArEHTxyE=
-github.com/steadybit/preflight-kit/go/preflight_kit_api v1.2.0/go.mod h1:wVBSCukPPkv+GBdWrRCyI6Kn3/SRAPB+t347i74V9Ak=
-github.com/steadybit/preflight-kit/go/preflight_kit_sdk v1.0.1 h1:UZVishrVeFAW00s5DqD8/dveR8Cmy0ZXHHbwoss2ozQ=
-github.com/steadybit/preflight-kit/go/preflight_kit_sdk v1.0.1/go.mod h1:YGvU1nB22JRH93cJPOWN7wXX/6J2n7U29OY2T71eO1M=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
