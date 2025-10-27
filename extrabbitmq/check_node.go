@@ -26,8 +26,8 @@ const (
 	// target id must match your node discovery
 	rabbitNodeTargetId = "com.steadybit.extension_rabbitmq.node"
 
-	NodeDown           = "rabbitmq node down"
-	ClusterNameChanged = "rabbitmq cluster name changed"
+	NodeDown           = "Node down"
+	ClusterNameChanged = "Cluster name changed"
 
 	// reuse the same values you already use elsewhere
 	stateCheckModeAllTheTime  = "all-time"
@@ -147,7 +147,9 @@ func (a *CheckNodesAction) Prepare(ctx context.Context, state *CheckNodesState, 
 	duration := extutil.ToInt64(req.Config["duration"])
 	state.End = time.Now().Add(time.Duration(duration) * time.Millisecond)
 	if req.Config["expectedChanges"] != nil {
-		state.ExpectedChanges = extutil.ToStringArray(req.Config["expectedChanges"])
+		expectedChanges := extutil.ToStringArray(req.Config["expectedChanges"])
+		slices.Sort(expectedChanges)
+		state.ExpectedChanges = expectedChanges
 	}
 	if req.Config["changeCheckMode"] != nil {
 		state.StateCheckMode = fmt.Sprintf("%v", req.Config["changeCheckMode"])
@@ -277,8 +279,6 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		Metrics:   extutil.Ptr(metrics),
 	}, nil
 }
-
-// ---------- helpers ----------
 
 func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes map[string][]string, ts time.Time) *action_kit_api.Metric {
 	var tooltip, st string
