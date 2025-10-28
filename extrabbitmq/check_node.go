@@ -26,8 +26,8 @@ const (
 	// target id must match your node discovery
 	rabbitNodeTargetId = "com.steadybit.extension_rabbitmq.node"
 
-	NodeDown           = "Node down"
-	ClusterNameChanged = "Cluster name changed"
+	NodeDown        = "Node down"
+	NodeAlarmRaised = "Node alarm raised"
 
 	// reuse the same values you already use elsewhere
 	stateCheckModeAllTheTime  = "all-time"
@@ -46,8 +46,8 @@ type CheckNodesState struct {
 	ManagementURL string
 
 	// baseline
-	BaselineCluster string
 	BaselineRunning map[string]bool // node -> running
+	BaselineAlarms  map[string]bool // node -> had any alarm at baseline
 	StateCheckOnce  bool
 }
 
@@ -97,7 +97,7 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				Type:  action_kit_api.ActionParameterTypeStringArray,
 				Options: extutil.Ptr([]action_kit_api.ParameterOption{
 					action_kit_api.ExplicitParameterOption{Label: "Node down", Value: NodeDown},
-					action_kit_api.ExplicitParameterOption{Label: "Cluster name changed", Value: ClusterNameChanged},
+					action_kit_api.ExplicitParameterOption{Label: "Node alarm raised", Value: NodeAlarmRaised},
 				}),
 			},
 			{
@@ -170,21 +170,16 @@ func (a *CheckNodesAction) Prepare(ctx context.Context, state *CheckNodesState, 
 	names := extutil.MustHaveValue(req.Target.Attributes, "rabbitmq.node.name")
 	state.NodeNames = append([]string(nil), names...)
 
-	// cluster baseline once
-	cn, _ := client.GetClusterName()
-	state.BaselineCluster = ""
-	if cn != nil {
-		state.BaselineCluster = cn.Name
-	}
-
 	// fetch each selected node individually to avoid listing all nodes
 	state.BaselineRunning = make(map[string]bool, len(state.NodeNames))
+	state.BaselineAlarms = make(map[string]bool, len(state.NodeNames))
 	for _, name := range state.NodeNames {
 		n, err := client.GetNode(name)
 		if err != nil {
 			return nil, extutil.Ptr(extension_kit.ToError(fmt.Sprintf("Failed to get node %s from RabbitMQ.", name), err))
 		}
 		state.BaselineRunning[n.Name] = n.IsRunning
+		state.BaselineAlarms[n.Name] = n.MemAlarm || n.DiskFreeAlarm
 	}
 
 	return nil, nil
@@ -205,19 +200,8 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		return nil, fmt.Errorf("no management client for %s", state.ManagementURL)
 	}
 
-	// per-node lookup only for the selected node names
-	cn, _ := client.GetClusterName()
-	curCluster := ""
-	if cn != nil {
-		curCluster = cn.Name
-	}
-
 	// detect changes
 	changes := map[string][]string{}
-
-	if curCluster != "" && curCluster != state.BaselineCluster {
-		changes[ClusterNameChanged] = []string{fmt.Sprintf("%s -> %s", state.BaselineCluster, curCluster)}
-	}
 
 	current := make(map[string]bool, len(state.NodeNames))
 	for _, name := range state.NodeNames {
@@ -229,6 +213,21 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 			}
 		} else {
 			current[n.Name] = n.IsRunning
+
+			mem := n.MemAlarm
+			disk := n.DiskFreeAlarm
+			any := mem || disk
+			if any {
+				labels := make([]string, 0, 2)
+				if mem {
+					labels = append(labels, "mem_alarm")
+				}
+				if disk {
+					labels = append(labels, "disk_free_alarm")
+				}
+				changes[NodeAlarmRaised] = append(changes[NodeAlarmRaised], fmt.Sprintf("%s: %s", n.Name, strings.Join(labels, ",")))
+			}
+
 			if was, ok := state.BaselineRunning[n.Name]; ok && was && !n.IsRunning {
 				changes[NodeDown] = append(changes[NodeDown], n.Name)
 			}

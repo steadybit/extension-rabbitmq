@@ -34,10 +34,10 @@ func Test_toNodeChangeMetric_ExpectedChangePresent_setsSuccess(t *testing.T) {
 
 	// Intentionally provide keys and values unsorted to verify deterministic sorting
 	changes := map[string][]string{
-		ClusterNameChanged: {"b->c", "a->b"},
-		NodeDown:           {"rabbit@z", "rabbit@a"},
+		NodeAlarmRaised: {"b->c", "a->b"},
+		NodeDown:        {"rabbit@z", "rabbit@a"},
 	}
-	changeNames := []string{NodeDown, ClusterNameChanged}
+	changeNames := []string{NodeDown, NodeAlarmRaised}
 	expected := []string{NodeDown, "something-else-not-present"} // NodeDown is expected
 
 	m := toNodeChangeMetric("https://rmq", expected, changeNames, changes, ts)
@@ -50,15 +50,15 @@ func Test_toNodeChangeMetric_ExpectedChangePresent_setsSuccess(t *testing.T) {
 	// Tooltip must include section headers and sorted values
 	tt := m.Metric["tooltip"]
 	assert.Contains(t, tt, "NODE ACTIVITY")
-	// keys are sorted lexicographically; ClusterNameChanged before NodeDown
-	firstIdx := findIndex(tt, "Cluster name changed:\n")
+	// keys are sorted lexicographically; NodeAlarmRaised before NodeDown
+	firstIdx := findIndex(tt, "Node alarm raised:\n")
 	secondIdx := findIndex(tt, "Node down:\n")
 	require.NotEqual(t, -1, firstIdx)
 	require.NotEqual(t, -1, secondIdx)
-	assert.Less(t, firstIdx, secondIdx, "cluster section should appear before node section")
+	assert.Less(t, firstIdx, secondIdx, "node alarm section should appear before node section")
 
 	// values under each key are sorted
-	// For ClusterNameChanged: a->b before b->c
+	// For NodeAlarmRaised: a->b before b->c
 	assert.True(t, indexOrder(tt, "a->b\n", "b->c\n"))
 	// For NodeDown: rabbit@a before rabbit@z
 	assert.True(t, indexOrder(tt, "rabbit@a\n", "rabbit@z\n"))
@@ -71,7 +71,7 @@ func Test_toNodeChangeMetric_UnexpectedChange_setsWarn(t *testing.T) {
 		NodeDown: {"rabbit@a"},
 	}
 	changeNames := []string{NodeDown}
-	expected := []string{ClusterNameChanged} // NodeDown not expected
+	expected := []string{NodeAlarmRaised} // NodeDown not expected
 
 	m := toNodeChangeMetric("http://x", expected, changeNames, changes, ts)
 	require.NotNil(t, m)
@@ -121,7 +121,6 @@ func Test_CheckNodesAction_NewEmptyState(t *testing.T) {
 	st := a.NewEmptyState()
 	// zero-value sanity checks
 	assert.Equal(t, st.ManagementURL, "")
-	assert.Equal(t, st.BaselineCluster, "")
 	assert.False(t, st.StateCheckOnce)
 	// Note: End is set during Prepare; here we only ensure type compiles and zero-value fields are present.
 }
