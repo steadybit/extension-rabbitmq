@@ -70,8 +70,8 @@ func registerHandlers(ctx context.Context) {
 	discovery_kit_sdk.Register(extrabbitmq.NewRabbitQueueDiscovery(ctx))
 
 	// Actions
-	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitFixedAmount())
-	action_kit_sdk.RegisterAction(extrabbitmq.NewProduceRabbitPeriodically())
+	action_kit_sdk.RegisterAction(extrabbitmq.NewPublishRabbitFixedAmount())
+	action_kit_sdk.RegisterAction(extrabbitmq.NewPublishRabbitPeriodically())
 	action_kit_sdk.RegisterAction(extrabbitmq.NewAlterQueueMaxLengthAttack())
 
 	// Checks

@@ -12,28 +12,27 @@ import (
 	"github.com/steadybit/extension-kit/extutil"
 )
 
-// new action: produce a fixed number of messages via the management API (rabbit-hole Publish)
-type produceRabbitFixedAmountAction struct{}
+type publishRabbitFixedAmountAction struct{}
 
 // ensure interfaces
 var (
-	_ action_kit_sdk.Action[ProduceMessageAttackState]           = (*produceRabbitFixedAmountAction)(nil)
-	_ action_kit_sdk.ActionWithStatus[ProduceMessageAttackState] = (*produceRabbitFixedAmountAction)(nil)
-	_ action_kit_sdk.ActionWithStop[ProduceMessageAttackState]   = (*produceRabbitFixedAmountAction)(nil)
+	_ action_kit_sdk.Action[PublishMessageAttackState]           = (*publishRabbitFixedAmountAction)(nil)
+	_ action_kit_sdk.ActionWithStatus[PublishMessageAttackState] = (*publishRabbitFixedAmountAction)(nil)
+	_ action_kit_sdk.ActionWithStop[PublishMessageAttackState]   = (*publishRabbitFixedAmountAction)(nil)
 )
 
-func NewProduceRabbitFixedAmount() action_kit_sdk.Action[ProduceMessageAttackState] {
-	return &produceRabbitFixedAmountAction{}
+func NewPublishRabbitFixedAmount() action_kit_sdk.Action[PublishMessageAttackState] {
+	return &publishRabbitFixedAmountAction{}
 }
 
-func (a *produceRabbitFixedAmountAction) NewEmptyState() ProduceMessageAttackState {
-	return ProduceMessageAttackState{}
+func (a *publishRabbitFixedAmountAction) NewEmptyState() PublishMessageAttackState {
+	return PublishMessageAttackState{}
 }
 
-func (a *produceRabbitFixedAmountAction) Describe() action_kit_api.ActionDescription {
+func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
-		Id:          "com.steadybit.extension_rabbitmq.queue.produce-fixed-amount",
-		Label:       "Produce (# of Messages)",
+		Id:          "com.steadybit.extension_rabbitmq.queue.publish-fixed-amount",
+		Label:       "Publish (# of Messages)",
 		Description: "Publish a fixed number of messages.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        extutil.Ptr(rabbitMQIcon),
@@ -82,7 +81,7 @@ func getDelayBetweenRequestsInMsFixedAmount(duration uint64, numberOfRequests ui
 }
 
 // Prepare validates request and sets up state. It defers to shared prepare helpers where available.
-func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *ProduceMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
+func (a *publishRabbitFixedAmountAction) Prepare(ctx context.Context, state *PublishMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
 	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
 
 	if extutil.ToInt64(request.Config["duration"]) == 0 {
@@ -90,26 +89,26 @@ func (a *produceRabbitFixedAmountAction) Prepare(ctx context.Context, state *Pro
 	}
 	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
 	// reuse existing prepare if present in project
-	return prepare(request, state, checkEndedProduceRabbitFixedAmount)
+	return prepare(request, state, checkEndedPublishRabbitFixedAmount)
 }
 
-func checkEndedProduceRabbitFixedAmount(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool {
+func checkEndedPublishRabbitFixedAmount(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool {
 	return executionRunData.requestCounter.Load() >= state.NumberOfMessages
 }
 
-func (a *produceRabbitFixedAmountAction) Start(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StartResult, error) {
+func (a *publishRabbitFixedAmountAction) Start(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StartResult, error) {
 	start(state) // reuse existing start helper which should launch worker goroutines
 	return nil, nil
 }
 
-func (a *produceRabbitFixedAmountAction) Status(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StatusResult, error) {
+func (a *publishRabbitFixedAmountAction) Status(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StatusResult, error) {
 	executionRunData, err := loadExecutionRunData(state.ExecutionID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load execution run data")
 		return nil, err
 	}
 
-	completed := checkEndedProduceRabbitFixedAmount(executionRunData, state)
+	completed := checkEndedPublishRabbitFixedAmount(executionRunData, state)
 	if completed {
 		stopTickers(executionRunData)
 		log.Info().Msg("Action completed")
@@ -122,6 +121,6 @@ func (a *produceRabbitFixedAmountAction) Status(ctx context.Context, state *Prod
 	}, nil
 }
 
-func (a *produceRabbitFixedAmountAction) Stop(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StopResult, error) {
+func (a *publishRabbitFixedAmountAction) Stop(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StopResult, error) {
 	return stop(state)
 }

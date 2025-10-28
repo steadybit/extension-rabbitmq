@@ -49,7 +49,7 @@ var (
 	ExecutionRunDataMap = sync.Map{} //make(map[uuid.UUID]*ExecutionRunData)
 )
 
-func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
+func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
 	var err error
 	if len(request.Target.Attributes["rabbitmq.queue.name"]) == 0 {
 		return nil, fmt.Errorf("the target is missing the rabbitmq.queue.name attribute")
@@ -122,7 +122,7 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *ProduceMess
 
 	// create worker pool
 	for w := 1; w <= state.MaxConcurrent; w++ {
-		go requestProducerWorker(executionRunData, state, checkEnded)
+		go requestPublisherWorker(executionRunData, state, checkEnded)
 	}
 	return nil, nil
 }
@@ -136,7 +136,7 @@ func loadExecutionRunData(executionID uuid.UUID) (*ExecutionRunData, error) {
 	return executionRunData, nil
 }
 
-func initExecutionRunData(state *ProduceMessageAttackState) {
+func initExecutionRunData(state *PublishMessageAttackState) {
 	saveExecutionRunData(state.ExecutionID, &ExecutionRunData{
 		stopTicker:            make(chan bool),
 		jobs:                  make(chan time.Time, state.MaxConcurrent),
@@ -171,7 +171,7 @@ func buildAMQPURL(base, vhost, user, pass string) (string, error) {
 	return u.String(), nil
 }
 
-func createPublishRequest(state *ProduceMessageAttackState) (exchange string, routingKey string, pub amqp.Publishing) {
+func createPublishRequest(state *PublishMessageAttackState) (exchange string, routingKey string, pub amqp.Publishing) {
 	// Map fields:
 	// - state.Body -> message body
 	// - state.RoutingKey   -> routing key (fallback to queue name)
@@ -202,7 +202,7 @@ func createPublishRequest(state *ProduceMessageAttackState) (exchange string, ro
 	}
 }
 
-func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMessageAttackState, checkEnded func(*ExecutionRunData, *ProduceMessageAttackState) bool) {
+func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMessageAttackState, checkEnded func(*ExecutionRunData, *PublishMessageAttackState) bool) {
 	// Dial once per worker, reuse channel
 	conn, ch, err := clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
 	if err != nil {
@@ -297,7 +297,7 @@ func requestProducerWorker(executionRunData *ExecutionRunData, state *ProduceMes
 	defer ch.Close()
 }
 
-func start(state *ProduceMessageAttackState) {
+func start(state *PublishMessageAttackState) {
 	executionRunData, err := loadExecutionRunData(state.ExecutionID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load execution run data")
@@ -343,7 +343,7 @@ func retrieveLatestMetrics(metrics chan action_kit_api.Metric) []action_kit_api.
 	}
 }
 
-func stop(state *ProduceMessageAttackState) (*action_kit_api.StopResult, error) {
+func stop(state *PublishMessageAttackState) (*action_kit_api.StopResult, error) {
 	executionRunData, err := loadExecutionRunData(state.ExecutionID)
 	if err != nil {
 		log.Debug().Err(err).Msg("Execution run data not found, stop was already called")

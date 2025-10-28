@@ -64,7 +64,7 @@ func Test_buildAMQPURL_setsCustomVhost(t *testing.T) {
 }
 
 func Test_createPublishRequest_defaultsAndHeaders(t *testing.T) {
-	state := &ProduceMessageAttackState{
+	state := &PublishMessageAttackState{
 		Exchange:   "",
 		RoutingKey: "",
 		Queue:      "queueA",

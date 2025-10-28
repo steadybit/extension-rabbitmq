@@ -14,12 +14,12 @@ import (
 	"testing"
 )
 
-func TestProduceRabbitFixedAmountAction_Describe(t *testing.T) {
-	action := produceRabbitFixedAmountAction{}
+func TestPublishRabbitFixedAmountAction_Describe(t *testing.T) {
+	action := publishRabbitFixedAmountAction{}
 	desc := action.Describe()
 
-	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue.produce-fixed-amount", desc.Id)
-	assert.Equal(t, "Produce (# of Messages)", desc.Label)
+	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue.publish-fixed-amount", desc.Id)
+	assert.Equal(t, "Publish (# of Messages)", desc.Label)
 	assert.Equal(t, "Publish a fixed number of messages.", desc.Description)
 	assert.NotNil(t, desc.TargetSelection)
 	assert.Equal(t, "RabbitMQ", *desc.Technology)
@@ -35,8 +35,8 @@ func TestGetDelayBetweenRequestsInMsFixedAmount(t *testing.T) {
 }
 
 func TestPrepareRabbitFixedAmountAction_ValidateDuration(t *testing.T) {
-	action := produceRabbitFixedAmountAction{}
-	state := ProduceMessageAttackState{}
+	action := publishRabbitFixedAmountAction{}
+	state := PublishMessageAttackState{}
 
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
 		Config:      map[string]any{"duration": 0},
@@ -50,8 +50,8 @@ func TestPrepareRabbitFixedAmountAction_ValidateDuration(t *testing.T) {
 func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	config.Config.ManagementEndpoints = make([]config.ManagementEndpoint, 0)
 	config.Config.ManagementEndpoints = append(config.Config.ManagementEndpoints, config.ManagementEndpoint{URL: "http://test", AMQP: &config.AMQPOptions{URL: "http://test"}})
-	action := produceRabbitFixedAmountAction{}
-	state := ProduceMessageAttackState{NumberOfMessages: 10}
+	action := publishRabbitFixedAmountAction{}
+	state := PublishMessageAttackState{NumberOfMessages: 10}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
 		Config:      map[string]any{"duration": 10000, "numberOfMessages": 10, "maxConcurrent": 1},
 		ExecutionId: uuid.New(),
@@ -68,13 +68,13 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	assert.Greater(t, state.DelayBetweenRequestsInMS, uint64(0))
 }
 
-func TestCheckEndedProduceRabbitFixedAmount(t *testing.T) {
+func TestCheckEndedPublishRabbitFixedAmount(t *testing.T) {
 	exec := &ExecutionRunData{}
 	exec.requestCounter.Store(10)
 
-	state := &ProduceMessageAttackState{NumberOfMessages: 10}
-	assert.True(t, checkEndedProduceRabbitFixedAmount(exec, state))
+	state := &PublishMessageAttackState{NumberOfMessages: 10}
+	assert.True(t, checkEndedPublishRabbitFixedAmount(exec, state))
 
 	exec.requestCounter.Store(5)
-	assert.False(t, checkEndedProduceRabbitFixedAmount(exec, state))
+	assert.False(t, checkEndedPublishRabbitFixedAmount(exec, state))
 }

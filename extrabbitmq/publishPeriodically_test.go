@@ -14,12 +14,12 @@ import (
 	"testing"
 )
 
-func TestProduceRabbitPeriodicallyAction_Describe(t *testing.T) {
-	action := produceRabbitPeriodicallyAction{}
+func TestPublishRabbitPeriodicallyAction_Describe(t *testing.T) {
+	action := publishRabbitPeriodicallyAction{}
 	desc := action.Describe()
 
-	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue.produce-periodically", desc.Id)
-	assert.Equal(t, "Produce (Messages / s)", desc.Label)
+	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue.publish-periodically", desc.Id)
+	assert.Equal(t, "Publish (Messages / s)", desc.Label)
 	assert.Equal(t, "Publish X messages per second for a given duration.", desc.Description)
 	assert.NotNil(t, desc.TargetSelection)
 	assert.Equal(t, "RabbitMQ", *desc.Technology)
@@ -40,8 +40,8 @@ func TestPrepareRabbitPeriodicallyAction_SetsDelayAndState(t *testing.T) {
 	config.Config.ManagementEndpoints = make([]config.ManagementEndpoint, 0)
 	config.Config.ManagementEndpoints = append(config.Config.ManagementEndpoints, config.ManagementEndpoint{URL: "http://localhost", AMQP: &config.AMQPOptions{URL: "amqp://localhost"}})
 
-	action := produceRabbitPeriodicallyAction{}
-	state := ProduceMessageAttackState{}
+	action := publishRabbitPeriodicallyAction{}
+	state := PublishMessageAttackState{}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
 		Config: map[string]any{
 			"messagesPerSecond": 5,
@@ -64,8 +64,8 @@ func TestPrepareRabbitPeriodicallyAction_SetsDelayAndState(t *testing.T) {
 }
 
 func TestStatusRabbitPeriodicallyAction_LoadsMetrics(t *testing.T) {
-	action := produceRabbitPeriodicallyAction{}
-	state := ProduceMessageAttackState{ExecutionID: uuid.New()}
+	action := publishRabbitPeriodicallyAction{}
+	state := PublishMessageAttackState{ExecutionID: uuid.New()}
 
 	erd := &ExecutionRunData{metrics: make(chan action_kit_api.Metric, 2)}
 	erd.metrics <- action_kit_api.Metric{Metric: map[string]string{"metric1": "true"}}
@@ -79,8 +79,8 @@ func TestStatusRabbitPeriodicallyAction_LoadsMetrics(t *testing.T) {
 }
 
 func TestStatusRabbitPeriodicallyAction_ErrorOnMissingRunData(t *testing.T) {
-	action := produceRabbitPeriodicallyAction{}
-	state := ProduceMessageAttackState{ExecutionID: uuid.New()}
+	action := publishRabbitPeriodicallyAction{}
+	state := PublishMessageAttackState{ExecutionID: uuid.New()}
 
 	res, err := action.Status(context.Background(), &state)
 	assert.Nil(t, res)
@@ -88,7 +88,7 @@ func TestStatusRabbitPeriodicallyAction_ErrorOnMissingRunData(t *testing.T) {
 }
 
 func TestGetExecutionRunData_ReturnsSavedData(t *testing.T) {
-	action := produceRabbitPeriodicallyAction{}
+	action := publishRabbitPeriodicallyAction{}
 	id := uuid.New()
 	expected := &ExecutionRunData{}
 	saveExecutionRunData(id, expected)

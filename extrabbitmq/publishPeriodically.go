@@ -12,28 +12,28 @@ import (
 	"github.com/steadybit/extension-kit/extutil"
 )
 
-// new action: produce a fixed number of messages via the management API (rabbit-hole Publish)
-type produceRabbitPeriodicallyAction struct{}
+// new action: publish a fixed number of messages via the management API (rabbit-hole Publish)
+type publishRabbitPeriodicallyAction struct{}
 
 // ensure interfaces
 var (
-	_ action_kit_sdk.Action[ProduceMessageAttackState]           = (*produceRabbitPeriodicallyAction)(nil)
-	_ action_kit_sdk.ActionWithStatus[ProduceMessageAttackState] = (*produceRabbitPeriodicallyAction)(nil)
-	_ action_kit_sdk.ActionWithStop[ProduceMessageAttackState]   = (*produceRabbitPeriodicallyAction)(nil)
+	_ action_kit_sdk.Action[PublishMessageAttackState]           = (*publishRabbitPeriodicallyAction)(nil)
+	_ action_kit_sdk.ActionWithStatus[PublishMessageAttackState] = (*publishRabbitPeriodicallyAction)(nil)
+	_ action_kit_sdk.ActionWithStop[PublishMessageAttackState]   = (*publishRabbitPeriodicallyAction)(nil)
 )
 
-func NewProduceRabbitPeriodically() action_kit_sdk.Action[ProduceMessageAttackState] {
-	return &produceRabbitPeriodicallyAction{}
+func NewPublishRabbitPeriodically() action_kit_sdk.Action[PublishMessageAttackState] {
+	return &publishRabbitPeriodicallyAction{}
 }
 
-func (a *produceRabbitPeriodicallyAction) NewEmptyState() ProduceMessageAttackState {
-	return ProduceMessageAttackState{}
+func (a *publishRabbitPeriodicallyAction) NewEmptyState() PublishMessageAttackState {
+	return PublishMessageAttackState{}
 }
 
-func (a *produceRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescription {
+func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
-		Id:          "com.steadybit.extension_rabbitmq.queue.produce-periodically",
-		Label:       "Produce (Messages / s)",
+		Id:          "com.steadybit.extension_rabbitmq.queue.publish-periodically",
+		Label:       "Publish (Messages / s)",
 		Description: "Publish X messages per second for a given duration.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        extutil.Ptr(rabbitMQIcon),
@@ -85,17 +85,17 @@ func getDelayBetweenRequestsInMsPeriodically(recordsPerSecond int64) uint64 {
 }
 
 // Prepare validates request and sets up state. It defers to shared prepare helpers where available.
-func (a *produceRabbitPeriodicallyAction) Prepare(ctx context.Context, state *ProduceMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
+func (a *publishRabbitPeriodicallyAction) Prepare(ctx context.Context, state *PublishMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
 	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsPeriodically(extutil.ToInt64(request.Config["messagesPerSecond"]))
-	return prepare(request, state, func(executionRunData *ExecutionRunData, state *ProduceMessageAttackState) bool { return false })
+	return prepare(request, state, func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool { return false })
 }
 
-func (a *produceRabbitPeriodicallyAction) Start(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StartResult, error) {
+func (a *publishRabbitPeriodicallyAction) Start(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StartResult, error) {
 	start(state) // reuse existing start helper which should launch worker goroutines
 	return nil, nil
 }
 
-func (a *produceRabbitPeriodicallyAction) Status(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StatusResult, error) {
+func (a *publishRabbitPeriodicallyAction) Status(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StatusResult, error) {
 	executionRunData, err := loadExecutionRunData(state.ExecutionID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load execution run data")
@@ -108,10 +108,10 @@ func (a *produceRabbitPeriodicallyAction) Status(ctx context.Context, state *Pro
 	}, nil
 }
 
-func (a *produceRabbitPeriodicallyAction) Stop(ctx context.Context, state *ProduceMessageAttackState) (*action_kit_api.StopResult, error) {
+func (a *publishRabbitPeriodicallyAction) Stop(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StopResult, error) {
 	return stop(state)
 }
 
-func (a *produceRabbitPeriodicallyAction) getExecutionRunData(executionID uuid.UUID) (*ExecutionRunData, error) {
+func (a *publishRabbitPeriodicallyAction) getExecutionRunData(executionID uuid.UUID) (*ExecutionRunData, error) {
 	return loadExecutionRunData(executionID)
 }

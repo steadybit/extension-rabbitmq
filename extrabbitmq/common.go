@@ -107,7 +107,7 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client, targetType string) 
 	return all, nil
 }
 
-type ProduceMessageAttackState struct {
+type PublishMessageAttackState struct {
 	Vhost                    string
 	Exchange                 string
 	Queue                    string

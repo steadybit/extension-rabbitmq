@@ -65,8 +65,8 @@ func TestAssertAttr(t *testing.T) {
 	})
 }
 
-func TestProduceMessageAttackState_DefaultValues(t *testing.T) {
-	s := ProduceMessageAttackState{}
+func TestPublishMessageAttackState_DefaultValues(t *testing.T) {
+	s := PublishMessageAttackState{}
 	assert.Empty(t, s.Vhost)
 	assert.Empty(t, s.Queue)
 	assert.Zero(t, s.DelayBetweenRequestsInMS)
@@ -84,10 +84,10 @@ func TestProduceMessageAttackState_DefaultValues(t *testing.T) {
 	assert.Empty(t, s.AmqpCA)
 }
 
-func TestProduceMessageAttackState_WithValues(t *testing.T) {
+func TestPublishMessageAttackState_WithValues(t *testing.T) {
 	headers := map[string]string{"k": "v"}
 	timeout := time.Now().Add(10 * time.Minute)
-	state := ProduceMessageAttackState{
+	state := PublishMessageAttackState{
 		Vhost:                    "/",
 		Exchange:                 "ex1",
 		Queue:                    "queue1",
