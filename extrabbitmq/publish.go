@@ -212,7 +212,7 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 
 	// Enable confirms (best-effort). If not supported, continue without.
 	var confirms <-chan amqp.Confirmation
-	if err := ch.Confirm(false); err == nil {
+	if err = ch.Confirm(false); err == nil {
 		confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
 	} else {
 		log.Debug().Msg("publisher confirms not available")
@@ -222,9 +222,7 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 	_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 
 	// Prepare static publishing data once
-	exchange, routingKey, pubTemplate := createPublishRequest(state)
-	mandatory := true
-	immediate := false
+	exchRequest, routingKeyExchange, pubTemplate := createPublishRequest(state)
 
 	// Helper to (re)dial once on demand
 	redial := func() error {
@@ -241,7 +239,7 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 		}
 		// Re-arm confirms and returns
 		confirms = nil
-		if e := ch.Confirm(false); e == nil {
+		if e = ch.Confirm(false); e == nil {
 			confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
 		}
 		_ = startReturnsLogger(ch, state.MaxConcurrent*2)
@@ -255,19 +253,19 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 			pub.Timestamp = time.Now()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			err := ch.PublishWithContext(ctx, exchange, routingKey, mandatory, immediate, pub)
+			err = ch.PublishWithContext(ctx, exchRequest, routingKeyExchange, true, false, pub)
 			cancel()
 
 			executionRunData.requestCounter.Add(1)
 			if err != nil {
-				log.Error().Err(err).Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish failed")
+				log.Error().Err(err).Str("exchange", exchRequest).Str("routingKey", routingKeyExchange).Msg("publish failed")
 				// single retry after redial
 				if re := redial(); re == nil {
 					ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
-					err = ch.PublishWithContext(ctx2, exchange, routingKey, mandatory, immediate, pub)
+					err = ch.PublishWithContext(ctx2, exchRequest, routingKeyExchange, true, false, pub)
 					cancel2()
 					if err != nil {
-						log.Error().Err(err).Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish failed after redial")
+						log.Error().Err(err).Str("exchange", exchRequest).Str("routingKey", routingKeyExchange).Msg("publish failed after redial")
 						continue
 					}
 				} else {
@@ -286,10 +284,10 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 				if c.Ack {
 					executionRunData.requestSuccessCounter.Add(1)
 				} else {
-					log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish nack")
+					log.Error().Str("exchange", exchRequest).Str("routingKey", routingKeyExchange).Msg("publish nack")
 				}
 			case <-time.After(5 * time.Second):
-				log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("no publish confirm within 5s")
+				log.Error().Str("exchange", exchRequest).Str("routingKey", routingKeyExchange).Msg("no publish confirm within 5s")
 			}
 		}
 	}
