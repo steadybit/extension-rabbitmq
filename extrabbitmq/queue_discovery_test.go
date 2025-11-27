@@ -30,7 +30,23 @@ func mockQueueMgmtServer(t *testing.T, queues []rabbithole.QueueInfo, cluster st
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/queues", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(queues)
+		type pagedQueuesResponse struct {
+			Items      []rabbithole.QueueInfo `json:"items"`
+			Page       int                    `json:"page"`
+			PageCount  int                    `json:"page_count"`
+			PageSize   int                    `json:"page_size"`
+			TotalCount int                    `json:"total_count"`
+		}
+
+		resp := pagedQueuesResponse{
+			Items:      queues,
+			Page:       1,
+			PageCount:  1,
+			PageSize:   len(queues),
+			TotalCount: len(queues),
+		}
+
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 	mux.HandleFunc("/api/cluster-name", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(struct {

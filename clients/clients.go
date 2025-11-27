@@ -1,4 +1,3 @@
-// clients/clients.go
 package clients
 
 import (
@@ -12,7 +11,47 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
+
+type retryTransport struct {
+	base       http.RoundTripper
+	maxRetries int
+	backoff    time.Duration
+}
+
+func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.base == nil {
+		t.base = http.DefaultTransport
+	}
+
+	// Only retry idempotent, usually safe management calls
+	if req.Method != http.MethodGet && req.Method != http.MethodHead && req.Method != http.MethodOptions {
+		return t.base.RoundTrip(req)
+	}
+
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt <= t.maxRetries; attempt++ {
+		resp, err = t.base.RoundTrip(req)
+		if err == nil && resp != nil && resp.StatusCode != http.StatusGatewayTimeout {
+			return resp, nil
+		}
+
+		// Stop if this was the last allowed attempt
+		if attempt == t.maxRetries {
+			break
+		}
+
+		// Simple fixed backoff before retrying
+		if t.backoff > 0 {
+			time.Sleep(t.backoff)
+		}
+	}
+
+	return resp, err
+}
 
 func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Client, error) {
 	if config.URL == "" {
@@ -48,8 +87,13 @@ func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Cli
 		}
 		tlsCfg.RootCAs = pool
 	}
-	tr := &http.Transport{TLSClientConfig: tlsCfg}
-	return rabbithole.NewTLSClient(u.String(), config.Username, config.Password, tr)
+	baseTr := &http.Transport{TLSClientConfig: tlsCfg}
+	rt := &retryTransport{
+		base:       baseTr,
+		maxRetries: 2,
+		backoff:    500 * time.Millisecond,
+	}
+	return rabbithole.NewTLSClient(u.String(), config.Username, config.Password, rt)
 }
 
 func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -88,10 +89,32 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
 		out := make([]discovery_kit_api.Target, 0, 32)
 
-		qs, err := client.ListQueues()
-		if err != nil {
-			return nil, err
+		var qs []rabbithole.QueueInfo
+		page := 1
+		pageSize := 400
+
+		for {
+			params := url.Values{}
+			params.Set("page", strconv.Itoa(page))
+			params.Set("page_size", strconv.Itoa(pageSize))
+
+			paged, err := client.PagedListQueuesWithParameters(params)
+			if err != nil {
+				return nil, err
+			}
+			if len(paged.Items) == 0 {
+				break
+			}
+
+			qs = append(qs, paged.Items...)
+
+			// Stop if we have fetched all items or reached the last page
+			if len(qs) >= paged.TotalCount || page >= paged.PageCount {
+				break
+			}
+			page++
 		}
+
 		for _, q := range qs {
 			amqpURL := resolveAMQPURLForClient(client.Endpoint)
 			cn, _ := client.GetClusterName()
