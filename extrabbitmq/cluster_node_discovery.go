@@ -6,8 +6,9 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
-	"github.com/steadybit/extension-rabbitmq/config"
 	"time"
+
+	"github.com/steadybit/extension-rabbitmq/config"
 
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
@@ -49,7 +50,7 @@ func (r *rabbitNodeDiscovery) Describe() discovery_kit_api.DiscoveryDescription 
 func (r *rabbitNodeDiscovery) DescribeTarget() discovery_kit_api.TargetDescription {
 	return discovery_kit_api.TargetDescription{
 		Id:       nodeTargetId,
-		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ node", Other: "RabbitMQ nodes"},
+		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ Node", Other: "RabbitMQ Nodes"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:     extutil.Ptr(rabbitMQIcon),

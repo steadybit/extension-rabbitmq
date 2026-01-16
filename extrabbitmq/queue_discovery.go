@@ -48,7 +48,7 @@ func (r *rabbitQueueDiscovery) Describe() discovery_kit_api.DiscoveryDescription
 func (r *rabbitQueueDiscovery) DescribeTarget() discovery_kit_api.TargetDescription {
 	return discovery_kit_api.TargetDescription{
 		Id:       queueTargetId,
-		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ queue", Other: "RabbitMQ queues"},
+		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ Queue", Other: "RabbitMQ Queues"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:     extutil.Ptr(rabbitMQIcon),
