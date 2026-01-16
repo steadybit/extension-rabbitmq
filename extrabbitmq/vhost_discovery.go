@@ -50,7 +50,7 @@ func (r *rabbitVhostDiscovery) Describe() discovery_kit_api.DiscoveryDescription
 func (r *rabbitVhostDiscovery) DescribeTarget() discovery_kit_api.TargetDescription {
 	return discovery_kit_api.TargetDescription{
 		Id:       vhostTargetId,
-		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ vhost", Other: "RabbitMQ vhosts"},
+		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ Vhost", Other: "RabbitMQ Vhosts"},
 		Category: extutil.Ptr("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:     extutil.Ptr(rabbitMQIcon),

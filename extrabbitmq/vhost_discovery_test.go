@@ -54,8 +54,8 @@ func TestVhostDiscovery_DescribeTarget(t *testing.T) {
 	td := (&rabbitVhostDiscovery{}).DescribeTarget()
 
 	require.Equal(t, vhostTargetId, td.Id)
-	require.Equal(t, "RabbitMQ vhost", td.Label.One)
-	require.Equal(t, "RabbitMQ vhosts", td.Label.Other)
+	require.Equal(t, "RabbitMQ Vhost", td.Label.One)
+	require.Equal(t, "RabbitMQ Vhosts", td.Label.Other)
 	require.NotNil(t, td.Category)
 	require.Equal(t, "rabbitmq", *td.Category)
 	require.NotNil(t, td.Icon)

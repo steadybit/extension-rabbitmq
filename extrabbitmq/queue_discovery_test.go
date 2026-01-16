@@ -74,8 +74,8 @@ func Test_Queue_DescribeTarget_Table(t *testing.T) {
 	td := (&rabbitQueueDiscovery{}).DescribeTarget()
 
 	require.Equal(t, queueTargetId, td.Id)
-	require.Equal(t, "RabbitMQ queue", td.Label.One)
-	require.Equal(t, "RabbitMQ queues", td.Label.Other)
+	require.Equal(t, "RabbitMQ Queue", td.Label.One)
+	require.Equal(t, "RabbitMQ Queues", td.Label.Other)
 	require.NotNil(t, td.Category)
 	require.Equal(t, "rabbitmq", *td.Category)
 
