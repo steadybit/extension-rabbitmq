@@ -56,8 +56,8 @@ func Test_Node_DescribeTarget_Table(t *testing.T) {
 	td := (&rabbitNodeDiscovery{}).DescribeTarget()
 
 	require.Equal(t, nodeTargetId, td.Id)
-	require.Equal(t, "RabbitMQ node", td.Label.One)
-	require.Equal(t, "RabbitMQ nodes", td.Label.Other)
+	require.Equal(t, "RabbitMQ Node", td.Label.One)
+	require.Equal(t, "RabbitMQ Nodes", td.Label.Other)
 	require.NotNil(t, td.Category)
 	require.Equal(t, "rabbitmq", *td.Category)
 
