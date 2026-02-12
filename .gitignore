@@ -5,3 +5,5 @@
 /snyk.sarif
 /.vscode
 
+
+.env
