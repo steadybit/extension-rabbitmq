@@ -162,6 +162,3 @@ discovery:
     node: 30
     vhost: 30
     queue: 120
-
-
-
