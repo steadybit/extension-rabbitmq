@@ -253,6 +253,12 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 					})
 				}
 			}
+			if completed && checkErr == nil && len(changeKeys) == 0 {
+				checkErr = extutil.Ptr(action_kit_api.ActionKitError{
+					Title:  fmt.Sprintf("Nodes didn't get the expected changes '%v'.", state.ExpectedChanges),
+					Status: extutil.Ptr(action_kit_api.Failed),
+				})
+			}
 		case stateCheckModeAtLeastOnce:
 			for _, c := range changeKeys {
 				if slices.Contains(state.ExpectedChanges, c) {
