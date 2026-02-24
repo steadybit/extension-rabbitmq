@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
 
@@ -263,9 +262,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 			}
 		case stateCheckModeAtLeastOnce:
 			for _, c := range changeKeys {
-				log.Info().Msg(fmt.Sprintf("Checking at least once , expected: %v, change: %s", state.ExpectedChanges, c))
 				if slices.Contains(state.ExpectedChanges, c) {
-					log.Info().Msg("StateCheckOnce to true")
 					state.StateCheckOnce = true
 				}
 			}
