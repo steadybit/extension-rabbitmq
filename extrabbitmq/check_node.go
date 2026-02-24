@@ -265,6 +265,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 			for _, c := range changeKeys {
 				log.Info().Msg(fmt.Sprintf("Checking at least once , expected: %v, change: %s", state.ExpectedChanges, c))
 				if slices.Contains(state.ExpectedChanges, c) {
+					log.Info().Msg("StateCheckOnce to true")
 					state.StateCheckOnce = true
 				}
 			}
