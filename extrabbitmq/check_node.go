@@ -6,12 +6,13 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
-	"github.com/steadybit/extension-rabbitmq/clients"
-	"github.com/steadybit/extension-rabbitmq/config"
 	"slices"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/steadybit/extension-rabbitmq/clients"
+	"github.com/steadybit/extension-rabbitmq/config"
 
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
@@ -201,7 +202,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 	}
 
 	// detect changes
-	changes := map[string][]string{}
+	changes := make(map[string][]string, 2)
 
 	current := make(map[string]bool, len(state.NodeNames))
 	for _, name := range state.NodeNames {
