@@ -22,13 +22,17 @@ rabbitmq:
 
 
 image:
+  # image.registry -- The container registry to use. Defaults to global.image.registry or ghcr.io.
+  registry: null
   # image.name -- The container image to use for the Steadybit Rabbitmq extension.
-  name: ghcr.io/steadybit/extension-rabbitmq
+  name: steadybit/extension-rabbitmq
   # image.tag -- tag name of the extension-rabbitmq container image to use. Defaults to appVersion of this chart.
   # See https://github.com/steadybit/extension-rabbitmq/pkgs/container/extension-rabbitmq/versions for all tags.
   tag: null
   # image.pullPolicy -- Specifies when to pull the image container.
   pullPolicy: IfNotPresent
+  # image.pullSecrets -- List of image pull secret names.
+  pullSecrets: []
 
 tls:
   server:
