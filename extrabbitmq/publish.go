@@ -235,6 +235,8 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 		var e error
 		conn, ch, e = clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
 		if e != nil {
+			conn = nil
+			ch = nil
 			return e
 		}
 		// Re-arm confirms and returns
@@ -248,6 +250,15 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 
 	for range executionRunData.jobs {
 		if !checkEnded(executionRunData, state) {
+			// If the channel is nil (e.g. after a failed redial), try to reconnect before publishing.
+			if ch == nil {
+				if re := redial(); re != nil {
+					log.Error().Err(re).Msg("amqp redial failed, skipping message")
+					executionRunData.requestCounter.Add(1)
+					continue
+				}
+			}
+
 			// per-message payload (cheap copy)
 			pub := pubTemplate
 			pub.Timestamp = time.Now()
@@ -291,8 +302,12 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 			}
 		}
 	}
-	defer conn.Close()
-	defer ch.Close()
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if ch != nil {
+		_ = ch.Close()
+	}
 }
 
 func start(state *PublishMessageAttackState) {

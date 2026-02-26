@@ -91,18 +91,24 @@ func FetchTargetPerClient(fn func(client *rabbithole.Client, targetType string) 
 	}
 
 	all := make([]discovery_kit_api.Target, 0)
+	var lastErr error
 	for _, ep := range config.Config.ManagementEndpoints {
 		c, err := clients.CreateMgmtClientFromURL(&ep)
 		if err != nil {
 			log.Warn().Str("endpoint", ep.URL).Msg("can't get a client.")
+			lastErr = err
 			continue
 		}
 		tgts, err := fn(c, targetType)
 		if err != nil {
 			log.Warn().Err(err).Str("endpoint", ep.URL).Str("target type", targetType).Msg("handler returned error for discovery on endpoint and target")
+			lastErr = err
 			continue
 		}
 		all = append(all, tgts...)
+	}
+	if len(all) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("all management endpoints failed for %s: %w", targetType, lastErr)
 	}
 	return all, nil
 }

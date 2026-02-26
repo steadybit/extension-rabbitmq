@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_commons"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_sdk"
@@ -130,8 +129,7 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 
 	targets, err := FetchTargetPerClient(handler, queueTargetId)
 	if err != nil {
-		// FetchTargetPerClient already logs per-endpoint errors; only return fatal errors
-		log.Warn().Err(err).Msg("queue discovery encountered errors")
+		return nil, err
 	}
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesQueues), nil
 }

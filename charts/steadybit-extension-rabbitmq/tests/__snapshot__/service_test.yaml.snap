@@ -5,7 +5,7 @@ manifest should match snapshot with TLS:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY"]}]}
         steadybit.com/extension-auto-registration: |
           {"extensions":[{"port":8083,"protocol":"https"}]}
       labels: null
@@ -28,7 +28,7 @@ manifest should match snapshot with mutual TLS:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY"]}]}
         steadybit.com/extension-auto-registration: |
           {"extensions":[{"port":8083,"protocol":"https"}]}
       labels: null
@@ -51,7 +51,7 @@ manifest should match snapshot with mutual TLS using containerPaths:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"https","types":["ACTION","DISCOVERY"]}]}
         steadybit.com/extension-auto-registration: |
           {"extensions":[{"port":8083,"protocol":"https"}]}
       labels: null
@@ -74,7 +74,7 @@ manifest should match snapshot without TLS:
     metadata:
       annotations:
         steadybit.com/extension-auto-discovery: |
-          {"extensions":[{"port":8083,"protocol":"http","types":["ACTION","DISCOVERY","EVENT","ADVICE"]}]}
+          {"extensions":[{"port":8083,"protocol":"http","types":["ACTION","DISCOVERY"]}]}
         steadybit.com/extension-auto-registration: |
           {"extensions":[{"port":8083,"protocol":"http"}]}
       labels: null

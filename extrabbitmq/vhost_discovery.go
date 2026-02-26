@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_commons"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_sdk"
@@ -101,7 +100,7 @@ func getAllVhosts(ctx context.Context) ([]discovery_kit_api.Target, error) {
 
 	targets, err := FetchTargetPerClient(handler, vhostTargetId)
 	if err != nil {
-		log.Warn().Err(err).Msg("vhost discovery encountered errors")
+		return nil, err
 	}
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesVhosts), nil
 }

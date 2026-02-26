@@ -10,7 +10,6 @@ import (
 
 	"github.com/steadybit/extension-rabbitmq/config"
 
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_commons"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_sdk"
@@ -104,7 +103,7 @@ func getAllNodes(ctx context.Context) ([]discovery_kit_api.Target, error) {
 
 	targets, err := FetchTargetPerClient(handler, nodeTargetId)
 	if err != nil {
-		log.Warn().Err(err).Msg("node discovery encountered errors")
+		return nil, err
 	}
 	return discovery_kit_commons.ApplyAttributeExcludes(targets, config.Config.DiscoveryAttributesExcludesNodes), nil
 }

@@ -70,7 +70,17 @@ func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Cli
 		}
 	}
 	if u.Scheme == "http" {
-		return rabbithole.NewClient(u.String(), config.Username, config.Password)
+		rt := &retryTransport{
+			base:       http.DefaultTransport,
+			maxRetries: 2,
+			backoff:    500 * time.Millisecond,
+		}
+		client, err := rabbithole.NewClient(u.String(), config.Username, config.Password)
+		if err != nil {
+			return nil, err
+		}
+		client.SetTransport(rt)
+		return client, nil
 	}
 	if u.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
