@@ -273,6 +273,17 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 				})
 			}
 		}
+	} else {
+		if len(changeKeys) > 0 {
+			changesSummary := "changes:"
+			for _, c := range changeKeys {
+				changesSummary += fmt.Sprintf(" %s", c)
+			}
+			checkErr = extutil.Ptr(action_kit_api.ActionKitError{
+				Title:  fmt.Sprintf("We were expecting no events but got these '%s'.", changesSummary),
+				Status: extutil.Ptr(action_kit_api.Failed),
+			})
+		}
 	}
 
 	metrics := []action_kit_api.Metric{
