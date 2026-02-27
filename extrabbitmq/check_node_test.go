@@ -4,21 +4,18 @@
 package extrabbitmq
 
 import (
-	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
-	"github.com/steadybit/extension-kit/extutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_toNodeChangeMetric_NoChanges(t *testing.T) {
 	ts := time.Now()
-	m := toNodeChangeMetric("http://mgmt", nil, []string{NoEvents}, map[string][]string{}, ts)
+	m := toNodeChangeMetric("http://mgmt", nil, nil, map[string][]string{}, ts)
 	require.NotNil(t, m)
 
 	assert.Equal(t, "rabbit_node_state", *m.Name)
@@ -30,14 +27,6 @@ func Test_toNodeChangeMetric_NoChanges(t *testing.T) {
 	assert.Equal(t, "info", m.Metric["state"])
 	assert.Equal(t, "No changes", m.Metric["tooltip"])
 	assert.Equal(t, "Expected: ", m.Metric["metric.id"])
-}
-
-func Test_toNodeChangeMetric_NoChanges_NoEventsExpected_setsSuccess(t *testing.T) {
-	ts := time.Now()
-	m := toNodeChangeMetric("http://mgmt", []string{NoEvents}, []string{NoEvents}, map[string][]string{}, ts)
-	require.NotNil(t, m)
-	assert.Equal(t, "success", m.Metric["state"])
-	assert.Equal(t, "No changes", m.Metric["tooltip"])
 }
 
 func Test_toNodeChangeMetric_ExpectedChangePresent_setsSuccess(t *testing.T) {
@@ -116,138 +105,6 @@ func indexOf(haystack, needle string) int {
 		}
 	}
 	return -1
-}
-
-// --- Status evaluation tests (exercising the check logic without network calls) ---
-
-func newTestState(expected []string, mode string, end time.Time) *CheckNodesState {
-	return &CheckNodesState{
-		End:             end,
-		ExpectedChanges: expected,
-		StateCheckMode:  mode,
-		NodeNames:       []string{"rabbit@node1"},
-		ManagementURL:   "http://mgmt",
-		BaselineRunning: map[string]bool{"rabbit@node1": true},
-		BaselineAlarms:  map[string]bool{"rabbit@node1": false},
-	}
-}
-
-// evaluateCheck simulates the evaluation part of Status() without needing a real RabbitMQ connection.
-func evaluateCheck(state *CheckNodesState, changes map[string][]string, completed bool) *action_kit_api.ActionKitError {
-	observedStates := make([]string, 0, len(changes)+1)
-	for k := range changes {
-		observedStates = append(observedStates, k)
-	}
-	if len(changes) == 0 {
-		observedStates = append(observedStates, NoEvents)
-	}
-
-	var checkErr *action_kit_api.ActionKitError
-	if len(state.ExpectedChanges) > 0 {
-		switch state.StateCheckMode {
-		case stateCheckModeAllTheTime:
-			for _, s := range observedStates {
-				if s == NoEvents && !slices.Contains(state.ExpectedChanges, NoEvents) {
-					continue
-				}
-				if !slices.Contains(state.ExpectedChanges, s) {
-					checkErr = &action_kit_api.ActionKitError{
-						Title:  fmt.Sprintf("Unexpected '%s' — expected %v.", s, state.ExpectedChanges),
-						Status: extutil.Ptr(action_kit_api.Failed),
-					}
-				}
-			}
-			if completed && checkErr == nil {
-				wantsRealChanges := slices.ContainsFunc(state.ExpectedChanges, func(s string) bool { return s != NoEvents })
-				sawRealChanges := slices.ContainsFunc(observedStates, func(s string) bool { return s != NoEvents })
-				if wantsRealChanges && !sawRealChanges {
-					checkErr = &action_kit_api.ActionKitError{
-						Title:  fmt.Sprintf("Expected changes %v never occurred.", state.ExpectedChanges),
-						Status: extutil.Ptr(action_kit_api.Failed),
-					}
-				}
-			}
-		case stateCheckModeAtLeastOnce:
-			for _, s := range observedStates {
-				if slices.Contains(state.ExpectedChanges, s) {
-					state.StateCheckOnce = true
-				}
-			}
-			if completed && !state.StateCheckOnce {
-				checkErr = &action_kit_api.ActionKitError{
-					Title:  fmt.Sprintf("Expected %v was never observed.", state.ExpectedChanges),
-					Status: extutil.Ptr(action_kit_api.Failed),
-				}
-			}
-		}
-	}
-	return checkErr
-}
-
-// All the time + No events: succeed when no events the entire time
-func Test_AllTheTime_NoEvents_AllClear(t *testing.T) {
-	state := newTestState([]string{NoEvents}, stateCheckModeAllTheTime, time.Now().Add(-time.Second))
-	err := evaluateCheck(state, map[string][]string{}, true)
-	assert.Nil(t, err)
-}
-
-// All the time + No events: fail when Node down appears
-func Test_AllTheTime_NoEvents_FailOnNodeDown(t *testing.T) {
-	state := newTestState([]string{NoEvents}, stateCheckModeAllTheTime, time.Now().Add(time.Minute))
-	err := evaluateCheck(state, map[string][]string{NodeDown: {"rabbit@node1"}}, false)
-	require.NotNil(t, err)
-	assert.Contains(t, err.Title, NodeDown)
-}
-
-// At least once + No events: succeed when first tick is clear then Node down
-func Test_AtLeastOnce_NoEvents_SucceedAfterNodeDown(t *testing.T) {
-	state := newTestState([]string{NoEvents}, stateCheckModeAtLeastOnce, time.Now().Add(time.Minute))
-
-	// tick 1: no events
-	err := evaluateCheck(state, map[string][]string{}, false)
-	assert.Nil(t, err)
-	assert.True(t, state.StateCheckOnce)
-
-	// tick 2: Node down — still OK because we saw NoEvents once
-	err = evaluateCheck(state, map[string][]string{NodeDown: {"rabbit@node1"}}, true)
-	assert.Nil(t, err)
-}
-
-// At least once + No events: succeed through NoEvents -> alarm -> NodeDown sequence
-func Test_AtLeastOnce_NoEvents_SucceedThroughMultipleChanges(t *testing.T) {
-	state := newTestState([]string{NoEvents}, stateCheckModeAtLeastOnce, time.Now().Add(time.Minute))
-
-	evaluateCheck(state, map[string][]string{}, false) // tick 1: no events
-	assert.True(t, state.StateCheckOnce)
-
-	evaluateCheck(state, map[string][]string{NodeAlarmRaised: {"rabbit@node1: mem_alarm"}}, false) // tick 2
-	err := evaluateCheck(state, map[string][]string{NodeDown: {"rabbit@node1"}}, true)             // tick 3
-	assert.Nil(t, err)
-}
-
-// At least once + No events: fail when alarm raised the entire time
-func Test_AtLeastOnce_NoEvents_FailWhenAlwaysAlarm(t *testing.T) {
-	state := newTestState([]string{NoEvents}, stateCheckModeAtLeastOnce, time.Now().Add(-time.Second))
-
-	// every tick has alarm, never NoEvents
-	err := evaluateCheck(state, map[string][]string{NodeAlarmRaised: {"rabbit@node1: mem_alarm"}}, true)
-	require.NotNil(t, err)
-	assert.Contains(t, err.Title, NoEvents)
-}
-
-// All the time + Node down: ticks with no changes should NOT fail (backward compat)
-func Test_AllTheTime_NodeDown_NoChangeTickIsNeutral(t *testing.T) {
-	state := newTestState([]string{NodeDown}, stateCheckModeAllTheTime, time.Now().Add(time.Minute))
-	err := evaluateCheck(state, map[string][]string{}, false)
-	assert.Nil(t, err) // no error — ticks with no changes are neutral
-}
-
-// All the time + Node down: fail at completion if node down never happened
-func Test_AllTheTime_NodeDown_FailIfNeverSeen(t *testing.T) {
-	state := newTestState([]string{NodeDown}, stateCheckModeAllTheTime, time.Now().Add(-time.Second))
-	err := evaluateCheck(state, map[string][]string{}, true)
-	require.NotNil(t, err)
-	assert.Contains(t, err.Title, "never occurred")
 }
 
 func Test_CheckNodesAction_Describe_Basics(t *testing.T) {
