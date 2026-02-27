@@ -29,6 +29,7 @@ const (
 
 	NodeDown        = "Node down"
 	NodeAlarmRaised = "Node alarm raised"
+	NoEvents        = "No events"
 
 	// reuse the same values you already use elsewhere
 	stateCheckModeAllTheTime  = "all-time"
@@ -97,6 +98,7 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				Label: "Expected Changes",
 				Type:  action_kit_api.ActionParameterTypeStringArray,
 				Options: extutil.Ptr([]action_kit_api.ParameterOption{
+					action_kit_api.ExplicitParameterOption{Label: "No events", Value: NoEvents},
 					action_kit_api.ExplicitParameterOption{Label: "Node down", Value: NodeDown},
 					action_kit_api.ExplicitParameterOption{Label: "Node alarm raised", Value: NodeAlarmRaised},
 				}),
@@ -235,59 +237,59 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		}
 	}
 
-	// expected change evaluation
+	// Determine observed state this tick: actual change types, or NoEvents when nothing happened.
 	completed := now.After(state.End)
 	var checkErr *action_kit_api.ActionKitError
-	changeKeys := make([]string, 0, len(changes))
+	observedStates := make([]string, 0, len(changes)+1)
 	for k := range changes {
-		changeKeys = append(changeKeys, k)
+		observedStates = append(observedStates, k)
+	}
+	if len(changes) == 0 {
+		observedStates = append(observedStates, NoEvents)
 	}
 
 	if len(state.ExpectedChanges) > 0 {
 		switch state.StateCheckMode {
 		case stateCheckModeAllTheTime:
-			for _, c := range changeKeys {
-				if !slices.Contains(state.ExpectedChanges, c) {
+			for _, s := range observedStates {
+				// Ticks with no changes are neutral — only flag them if "No events" was explicitly expected
+				if s == NoEvents && !slices.Contains(state.ExpectedChanges, NoEvents) {
+					continue
+				}
+				if !slices.Contains(state.ExpectedChanges, s) {
 					checkErr = extutil.Ptr(action_kit_api.ActionKitError{
-						Title:  fmt.Sprintf("Nodes got an unexpected change '%s' whereas '%v' is expected.", c, state.ExpectedChanges),
+						Title:  fmt.Sprintf("Unexpected '%s' — expected %v.", s, state.ExpectedChanges),
 						Status: extutil.Ptr(action_kit_api.Failed),
 					})
 				}
 			}
-			if completed && checkErr == nil && len(changeKeys) == 0 {
-				checkErr = extutil.Ptr(action_kit_api.ActionKitError{
-					Title:  fmt.Sprintf("Nodes didn't get the expected changes '%v'.", state.ExpectedChanges),
-					Status: extutil.Ptr(action_kit_api.Failed),
-				})
+			if completed && checkErr == nil {
+				wantsRealChanges := slices.ContainsFunc(state.ExpectedChanges, func(s string) bool { return s != NoEvents })
+				sawRealChanges := slices.ContainsFunc(observedStates, func(s string) bool { return s != NoEvents })
+				if wantsRealChanges && !sawRealChanges {
+					checkErr = extutil.Ptr(action_kit_api.ActionKitError{
+						Title:  fmt.Sprintf("Expected changes %v never occurred.", state.ExpectedChanges),
+						Status: extutil.Ptr(action_kit_api.Failed),
+					})
+				}
 			}
 		case stateCheckModeAtLeastOnce:
-			for _, c := range changeKeys {
-				if slices.Contains(state.ExpectedChanges, c) {
+			for _, s := range observedStates {
+				if slices.Contains(state.ExpectedChanges, s) {
 					state.StateCheckOnce = true
 				}
 			}
 			if completed && !state.StateCheckOnce {
 				checkErr = extutil.Ptr(action_kit_api.ActionKitError{
-					Title:  fmt.Sprintf("Nodes didn't get the expected changes '%v' at least once.", state.ExpectedChanges),
+					Title:  fmt.Sprintf("Expected %v was never observed.", state.ExpectedChanges),
 					Status: extutil.Ptr(action_kit_api.Failed),
 				})
 			}
 		}
-	} else {
-		if len(changeKeys) > 0 {
-			changesSummary := "changes:"
-			for _, c := range changeKeys {
-				changesSummary += fmt.Sprintf(" %s", c)
-			}
-			checkErr = extutil.Ptr(action_kit_api.ActionKitError{
-				Title:  fmt.Sprintf("We were expecting no events but got these %s.", changesSummary),
-				Status: extutil.Ptr(action_kit_api.Failed),
-			})
-		}
 	}
 
 	metrics := []action_kit_api.Metric{
-		*toNodeChangeMetric(state.ManagementURL, state.ExpectedChanges, changeKeys, changes, now),
+		*toNodeChangeMetric(state.ManagementURL, state.ExpectedChanges, observedStates, changes, now),
 	}
 
 	return &action_kit_api.StatusResult{
@@ -297,7 +299,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 	}, nil
 }
 
-func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes map[string][]string, ts time.Time) *action_kit_api.Metric {
+func toNodeChangeMetric(mgmtURL string, expected, observedStates []string, changes map[string][]string, ts time.Time) *action_kit_api.Metric {
 	var tooltip, st string
 
 	if len(changes) > 0 {
@@ -316,19 +318,22 @@ func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes 
 			}
 		}
 		tooltip = recap
+	} else {
+		tooltip = "No changes"
+	}
 
-		sort.Strings(expected)
-		sort.Strings(changeNames)
+	// Determine widget state by comparing observed vs expected
+	sort.Strings(expected)
+	sort.Strings(observedStates)
 
+	st = "info"
+	if len(expected) > 0 {
 		st = "warn"
-		for _, c := range changeNames {
-			if slices.Contains(expected, c) {
+		for _, s := range observedStates {
+			if slices.Contains(expected, s) {
 				st = "success"
 			}
 		}
-	} else {
-		tooltip = "No changes"
-		st = "info"
 	}
 
 	return extutil.Ptr(action_kit_api.Metric{
