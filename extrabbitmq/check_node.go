@@ -94,10 +94,9 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				Required:     extutil.Ptr(true),
 			},
 			{
-				Name:         "expectedChanges",
-				Label:        "Expected Changes",
-				Type:         action_kit_api.ActionParameterTypeStringArray,
-				DefaultValue: extutil.Ptr(NoEvents),
+				Name:  "expectedChanges",
+				Label: "Expected Changes",
+				Type:  action_kit_api.ActionParameterTypeStringArray,
 				Options: extutil.Ptr([]action_kit_api.ParameterOption{
 					action_kit_api.ExplicitParameterOption{Label: "No events", Value: NoEvents},
 					action_kit_api.ExplicitParameterOption{Label: "Node down", Value: NodeDown},
