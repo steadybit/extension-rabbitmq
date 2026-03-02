@@ -86,11 +86,17 @@ func (r *rabbitQueueDiscovery) DiscoverTargets(ctx context.Context) ([]discovery
 
 func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
-		out := make([]discovery_kit_api.Target, 0, 32)
+		// Resolve values that are constant per client once, not per queue.
+		amqpURL := resolveAMQPURLForClient(client.Endpoint)
+		clusterName := ""
+		if cn, _ := client.GetClusterName(); cn != nil {
+			clusterName = cn.Name
+		}
 
-		var qs []rabbithole.QueueInfo
+		out := make([]discovery_kit_api.Target, 0, 256)
 		page := 1
-		pageSize := 400
+		pageSize := 500
+		fetched := 0
 
 		for {
 			params := url.Values{}
@@ -105,25 +111,19 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 				break
 			}
 
-			qs = append(qs, paged.Items...)
+			// Convert to targets immediately — no need to accumulate raw QueueInfo.
+			for _, q := range paged.Items {
+				out = append(out, toQueueTarget(client.Endpoint, amqpURL, q, clusterName))
+			}
 
+			fetched += len(paged.Items)
 			// Stop if we have fetched all items or reached the last page
-			if len(qs) >= paged.TotalCount || page >= paged.PageCount {
+			if fetched >= paged.TotalCount || page >= paged.PageCount {
 				break
 			}
 			page++
 		}
 
-		for _, q := range qs {
-			amqpURL := resolveAMQPURLForClient(client.Endpoint)
-			cn, _ := client.GetClusterName()
-			clusterName := ""
-			if cn != nil {
-				clusterName = cn.Name
-			}
-
-			out = append(out, toQueueTarget(client.Endpoint, amqpURL, q, clusterName))
-		}
 		return out, nil
 	}
 

@@ -115,6 +115,52 @@ func Test_retrieveLatestMetrics_drainsChannel(t *testing.T) {
 	}
 }
 
+func Test_stopAndCloseJobs_noRace(t *testing.T) {
+	// Regression test: stop() must wait for the ticker goroutine to exit
+	// before closing the jobs channel, otherwise we get "send on closed channel" panic.
+	// Run with -race and -count=100 for best coverage.
+	for i := 0; i < 50; i++ {
+		erd := &ExecutionRunData{
+			stopTicker: make(chan bool),
+			jobs:       make(chan time.Time, 1),
+			tickers:    time.NewTicker(1 * time.Millisecond), // very fast to maximise race window
+			metrics:    make(chan action_kit_api.Metric, 10),
+			tickerDone: make(chan struct{}),
+		}
+
+		// Start the ticker goroutine exactly as start() does
+		go func() {
+			defer close(erd.tickerDone)
+			for {
+				select {
+				case <-erd.stopTicker:
+					return
+				case t := <-erd.tickers.C:
+					erd.jobs <- t
+				}
+			}
+		}()
+
+		// Drain jobs in background to prevent the goroutine from blocking
+		drain := make(chan struct{})
+		go func() {
+			defer close(drain)
+			for range erd.jobs {
+			}
+		}()
+
+		// Let ticks accumulate briefly
+		time.Sleep(5 * time.Millisecond)
+
+		// Reproduce the stop() sequence: stopTickers -> wait for goroutine -> close(jobs)
+		stopTickers(erd)
+		<-erd.tickerDone
+		close(erd.jobs)
+
+		<-drain
+	}
+}
+
 func Test_stopTickers_stopsAndSignalsOnce(t *testing.T) {
 	erd := &ExecutionRunData{
 		tickers:    time.NewTicker(time.Hour),

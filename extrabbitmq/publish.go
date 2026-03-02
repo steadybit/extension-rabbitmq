@@ -28,6 +28,7 @@ type ExecutionRunData struct {
 	requestCounter        atomic.Uint64              // stores the number of requests for each execution
 	requestSuccessCounter atomic.Uint64              // stores the number of successful requests for each execution
 	stopOnce              sync.Once                  // ensures ticker stop/close happens once
+	tickerDone            chan struct{}              // closed when the ticker goroutine exits
 }
 
 func startReturnsLogger(ch *amqp.Channel, buf int) <-chan amqp.Return {
@@ -317,11 +318,13 @@ func start(state *PublishMessageAttackState) {
 	}
 	executionRunData.tickers = time.NewTicker(time.Duration(state.DelayBetweenRequestsInMS) * time.Millisecond)
 	executionRunData.stopTicker = make(chan bool)
+	executionRunData.tickerDone = make(chan struct{})
 
 	now := time.Now()
 	log.Debug().Msgf("Schedule first message at %v", now)
 	executionRunData.jobs <- now
 	go func() {
+		defer close(executionRunData.tickerDone)
 		for {
 			select {
 			case <-executionRunData.stopTicker:
@@ -363,6 +366,9 @@ func stop(state *PublishMessageAttackState) (*action_kit_api.StopResult, error) 
 		return nil, nil
 	}
 	stopTickers(executionRunData)
+	if executionRunData.tickerDone != nil {
+		<-executionRunData.tickerDone
+	}
 	close(executionRunData.jobs)
 
 	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
