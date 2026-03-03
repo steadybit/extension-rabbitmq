@@ -1,13 +1,14 @@
 package extrabbitmq
 
 import (
-	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"net/url"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 )
 
 func mustParse(t *testing.T, s string) *url.URL {
@@ -136,7 +137,11 @@ func Test_stopAndCloseJobs_noRace(t *testing.T) {
 				case <-erd.stopTicker:
 					return
 				case t := <-erd.tickers.C:
-					erd.jobs <- t
+					select {
+					case erd.jobs <- t:
+					case <-erd.stopTicker:
+						return
+					}
 				}
 			}
 		}()
@@ -158,6 +163,193 @@ func Test_stopAndCloseJobs_noRace(t *testing.T) {
 		close(erd.jobs)
 
 		<-drain
+	}
+}
+
+func Test_tickerGoroutine_doesNotBlockOnFullJobsChannel(t *testing.T) {
+	// Regression test: if no workers are consuming jobs (e.g. all died from
+	// connection failures), the ticker goroutine must not block forever on
+	// jobs <- t. The nested select on stopTicker must allow it to exit.
+	for i := 0; i < 50; i++ {
+		erd := &ExecutionRunData{
+			stopTicker: make(chan bool),
+			jobs:       make(chan time.Time, 1), // buffer of 1
+			tickers:    time.NewTicker(1 * time.Millisecond),
+			metrics:    make(chan action_kit_api.Metric, 10),
+			tickerDone: make(chan struct{}),
+		}
+
+		// Start ticker goroutine — nobody consumes from jobs
+		go func() {
+			defer close(erd.tickerDone)
+			for {
+				select {
+				case <-erd.stopTicker:
+					return
+				case t := <-erd.tickers.C:
+					select {
+					case erd.jobs <- t:
+					case <-erd.stopTicker:
+						return
+					}
+				}
+			}
+		}()
+
+		// Let ticks fill the buffer and block
+		time.Sleep(5 * time.Millisecond)
+
+		// Stop must unblock the goroutine even though nobody reads jobs
+		stopTickers(erd)
+
+		select {
+		case <-erd.tickerDone:
+			// success — goroutine exited
+		case <-time.After(2 * time.Second):
+			t.Fatal("ticker goroutine did not exit within 2s — deadlock")
+		}
+
+		close(erd.jobs)
+	}
+}
+
+func Test_firstSendSelect_unblockOnStop(t *testing.T) {
+	// Unit test for the select pattern used in start() for the first message send.
+	// If the jobs channel is full and stopTicker is closed, the send must not block.
+	for i := 0; i < 50; i++ {
+		jobs := make(chan time.Time) // unbuffered — send will block
+		stopCh := make(chan bool)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			select {
+			case jobs <- time.Now():
+			case <-stopCh:
+				return
+			}
+		}()
+
+		// Give the goroutine time to block on the select
+		time.Sleep(1 * time.Millisecond)
+
+		close(stopCh)
+
+		select {
+		case <-done:
+			// success
+		case <-time.After(2 * time.Second):
+			t.Fatal("first send select did not unblock via stopTicker — deadlock")
+		}
+	}
+}
+
+func Test_stop_completesWhenNoWorkersAlive(t *testing.T) {
+	// End-to-end test: simulate the full prepare → start → stop lifecycle
+	// with no AMQP workers consuming from jobs.
+	id := uuid.New()
+	state := &PublishMessageAttackState{
+		ExecutionID:              id,
+		DelayBetweenRequestsInMS: 5,
+		MaxConcurrent:            2,
+		SuccessRate:              0, // don't fail on success rate
+	}
+
+	// Set up execution run data (normally done by prepare/initExecutionRunData)
+	erd := &ExecutionRunData{
+		stopTicker: make(chan bool),
+		jobs:       make(chan time.Time, state.MaxConcurrent),
+		metrics:    make(chan action_kit_api.Metric, state.MaxConcurrent),
+	}
+	ExecutionRunDataMap.Store(id, erd)
+
+	// Drain jobs in background to simulate workers that started but then died
+	// after consuming the initial job — this lets start() proceed past the first send.
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for range erd.jobs {
+		}
+	}()
+
+	// Start the ticker
+	start(state)
+
+	// Let some ticks fire
+	time.Sleep(20 * time.Millisecond)
+
+	// Call stop — must not hang
+	done := make(chan struct{})
+	var result *action_kit_api.StopResult
+	var stopErr error
+	go func() {
+		defer close(done)
+		result, stopErr = stop(state)
+	}()
+
+	select {
+	case <-done:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop() did not complete within 5s — deadlock")
+	}
+
+	<-drainDone
+
+	if stopErr != nil {
+		t.Fatalf("stop returned error: %v", stopErr)
+	}
+	if result != nil && result.Error != nil {
+		// With SuccessRate=0, any success rate is acceptable
+		t.Fatalf("unexpected error in stop result: %v", result.Error.Title)
+	}
+
+	// Verify execution data was cleaned up
+	if _, ok := ExecutionRunDataMap.Load(id); ok {
+		t.Fatal("execution run data should have been deleted after stop")
+	}
+}
+
+func Test_stop_calledTwiceDoesNotPanic(t *testing.T) {
+	// Calling stop() twice should be safe — the second call should return nil
+	// because the execution data was already deleted.
+	id := uuid.New()
+	state := &PublishMessageAttackState{
+		ExecutionID:              id,
+		DelayBetweenRequestsInMS: 50,
+		MaxConcurrent:            1,
+		SuccessRate:              0,
+	}
+
+	erd := &ExecutionRunData{
+		stopTicker: make(chan bool),
+		jobs:       make(chan time.Time, 1),
+		metrics:    make(chan action_kit_api.Metric, 1),
+	}
+	ExecutionRunDataMap.Store(id, erd)
+
+	// Drain jobs
+	go func() {
+		for range erd.jobs {
+		}
+	}()
+
+	start(state)
+	time.Sleep(10 * time.Millisecond)
+
+	// First stop
+	_, err := stop(state)
+	if err != nil {
+		t.Fatalf("first stop returned error: %v", err)
+	}
+
+	// Second stop — should return nil, nil (not found)
+	result, err := stop(state)
+	if err != nil {
+		t.Fatalf("second stop returned error: %v", err)
+	}
+	if result != nil {
+		t.Fatal("second stop should return nil result")
 	}
 }
 

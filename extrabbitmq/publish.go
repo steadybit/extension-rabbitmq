@@ -322,7 +322,11 @@ func start(state *PublishMessageAttackState) {
 
 	now := time.Now()
 	log.Debug().Msgf("Schedule first message at %v", now)
-	executionRunData.jobs <- now
+	select {
+	case executionRunData.jobs <- now:
+	case <-executionRunData.stopTicker:
+		return
+	}
 	go func() {
 		defer close(executionRunData.tickerDone)
 		for {
@@ -331,8 +335,13 @@ func start(state *PublishMessageAttackState) {
 				log.Debug().Msg("Stop Message Scheduler")
 				return
 			case t := <-executionRunData.tickers.C:
-				log.Debug().Msgf("Schedule Message at %v", t)
-				executionRunData.jobs <- t
+				select {
+				case executionRunData.jobs <- t:
+					log.Debug().Msgf("Schedule Message at %v", t)
+				case <-executionRunData.stopTicker:
+					log.Debug().Msg("Stop Message Scheduler")
+					return
+				}
 			}
 		}
 	}()
