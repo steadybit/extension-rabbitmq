@@ -126,12 +126,13 @@ type PublishMessageAttackState struct {
 	NumberOfMessages         uint64
 	ExecutionID              uuid.UUID
 	Headers                  map[string]string
-	// AMQP configuration
-	AmqpURL                string
-	AmqpUser               string
-	AmqpPassword           string
-	AmqpInsecureSkipVerify bool
-	AmqpCA                 string
+	// AMQP configuration — excluded from JSON to avoid leaking credentials in logs.
+	// Workers receive these via the original state pointer from prepare().
+	AmqpURL                string `json:"-"`
+	AmqpUser               string `json:"-"`
+	AmqpPassword           string `json:"-"`
+	AmqpInsecureSkipVerify bool   `json:"-"`
+	AmqpCA                 string `json:"-"`
 }
 
 func setEndpointsJSON(eps []config.ManagementEndpoint) {

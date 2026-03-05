@@ -1,8 +1,10 @@
 package extrabbitmq
 
 import (
+	"encoding/json"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -350,6 +352,34 @@ func Test_stop_calledTwiceDoesNotPanic(t *testing.T) {
 	}
 	if result != nil {
 		t.Fatal("second stop should return nil result")
+	}
+}
+
+func Test_credentialsNotInJSON(t *testing.T) {
+	state := PublishMessageAttackState{
+		Queue:                  "test-queue",
+		AmqpURL:                "amqp://user:secret@host:5672/vhost",
+		AmqpUser:               "user",
+		AmqpPassword:           "secret",
+		AmqpInsecureSkipVerify: true,
+		AmqpCA:                 "/path/to/ca.pem",
+	}
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	s := string(data)
+	for _, sensitive := range []string{"AmqpURL", "AmqpUser", "AmqpPassword", "AmqpInsecureSkipVerify", "AmqpCA", "secret", "amqp://user"} {
+		if strings.Contains(s, sensitive) {
+			t.Errorf("JSON contains sensitive field %q: %s", sensitive, s)
+		}
+	}
+
+	// Non-sensitive fields should still be present
+	if !strings.Contains(s, "test-queue") {
+		t.Errorf("JSON missing expected field Queue: %s", s)
 	}
 }
 
