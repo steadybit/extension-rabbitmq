@@ -6,6 +6,11 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	_ "github.com/KimMachineGun/automemlimit" // Sets GOMEMLIMIT to 90% of cgroup limit.
 	"github.com/rs/zerolog"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
@@ -23,9 +28,6 @@ import (
 	"github.com/steadybit/extension-rabbitmq/config"
 	"github.com/steadybit/extension-rabbitmq/extrabbitmq"
 	_ "go.uber.org/automaxprocs" // Adjusts GOMAXPROCS.
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 // ExtensionListResponse merges ActionKit, DiscoveryKit, EventKit, AdviceKit.
@@ -35,6 +37,8 @@ type ExtensionListResponse struct {
 	event_kit_api.EventListenerList `json:",inline"`
 	advice_kit_api.AdviceList       `json:",inline"`
 }
+
+var startedAt = time.Now().Format(time.RFC3339)
 
 func main() {
 	extlogging.InitZeroLog()
@@ -79,7 +83,7 @@ func registerHandlers(ctx context.Context) {
 	action_kit_sdk.RegisterAction(extrabbitmq.NewCheckNodesAction())
 
 	// Root index
-	exthttp.RegisterHttpHandler("/", exthttp.GetterAsHandler(getExtensionList))
+	exthttp.RegisterHttpHandler("/", exthttp.IfNoneMatchHandler(func() string { return startedAt }, exthttp.GetterAsHandler(getExtensionList)))
 }
 
 func getExtensionList() ExtensionListResponse {
