@@ -1,5 +1,9 @@
 # Changelog
 
+## (next)
+
+- Support if-none-match for the extension list endpoint
+
 ## v1.0.10
 
 - fix: prevent deadlock in publish stop when AMQP workers die
