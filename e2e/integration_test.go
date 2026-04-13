@@ -95,7 +95,7 @@ func testDiscoverNodes(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
 }
 
 func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
-	if out, err := exec.Command("helm", "repo", "add", "bitnami", "https://charts.bitnami.com/bitnami").CombinedOutput(); err != nil {
+	if out, err := exec.Command("helm", "repo", "add", "bitnami", "https://charts.bitnami.com/bitnami").CombinedOutput(); err != nil { //NOSONAR go:S4036
 		return fmt.Errorf("failed to add repo: %s: %s", err, out)
 	}
 	// Single replica, default vhost, user/password, service ClusterIP.
@@ -115,7 +115,7 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 		"--wait",
 		"--timeout=10m0s",
 	}
-	if out, err := exec.Command("helm", args...).CombinedOutput(); err != nil {
+	if out, err := exec.Command("helm", args...).CombinedOutput(); err != nil { //NOSONAR go:S4036
 		return fmt.Errorf("failed to install rabbitmq chart: %s: %s", err, string(out))
 	}
 
@@ -133,7 +133,7 @@ func ensureRabbitMQTopology(minikube *e2e.Minikube, ns, pod, user, pass, vhost, 
 	// Retry loop because management may need a few seconds even after --wait
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
-		cmd := exec.Command(
+		cmd := exec.Command( //NOSONAR go:S4036
 			"kubectl", "--context", minikube.Profile, "-n", ns, "exec", pod, "--", "bash", "-ceu",
 			fmt.Sprintf(`
 set -o pipefail
