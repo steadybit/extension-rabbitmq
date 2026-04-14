@@ -42,7 +42,7 @@ func Test_buildAMQPURL_injectsCreds_and_VhostRoot(t *testing.T) {
 }
 
 func Test_buildAMQPURL_preservesExistingCreds_and_Vhost(t *testing.T) {
-	got, err := buildAMQPURL("amqp://x:y@host/vh", "ignored", "u", "p")
+	got, err := buildAMQPURL("amqp://x:y@host/vh", "ignored", "u", "p") //NOSONAR go:S2068
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -358,7 +358,7 @@ func Test_stop_calledTwiceDoesNotPanic(t *testing.T) {
 func Test_credentialsNotInJSON(t *testing.T) {
 	state := PublishMessageAttackState{
 		Queue:                  "test-queue",
-		AmqpURL:                "amqp://user:secret@host:5672/vhost",
+		AmqpURL:                "amqp://user:secret@host:5672/vhost", //NOSONAR go:S2068
 		AmqpUser:               "user",
 		AmqpPassword:           "secret",
 		AmqpInsecureSkipVerify: true,

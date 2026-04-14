@@ -115,7 +115,7 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 		"--wait",
 		"--timeout=10m0s",
 	}
-	if out, err := exec.Command("helm", args...).CombinedOutput(); err != nil { //NOSONAR go:S4036
+	if out, err := exec.Command("helm", args...).CombinedOutput(); err != nil { //NOSONAR go:S4036 go:S2068
 		return fmt.Errorf("failed to install rabbitmq chart: %s: %s", err, string(out))
 	}
 

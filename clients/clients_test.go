@@ -6,12 +6,13 @@ package clients
 import (
 	"crypto/tls"
 	"errors"
-	"github.com/steadybit/extension-rabbitmq/config"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/steadybit/extension-rabbitmq/config"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -67,7 +68,7 @@ func TestCreateMgmtClientFromURL_ExtractsCredentialsFromURL(t *testing.T) {
 	u := &url.URL{
 		Scheme: "http",
 		Host:   "localhost:15672",
-		User:   url.UserPassword("admin", "secret"),
+		User:   url.UserPassword("admin", "secret"), //NOSONAR go:S6437
 	}
 	c, err := CreateMgmtClientFromURL(createConfig(u.String(), "", "", false, ""))
 	assert.NoError(t, err)
@@ -76,7 +77,7 @@ func TestCreateMgmtClientFromURL_ExtractsCredentialsFromURL(t *testing.T) {
 
 func TestCreateMgmtClientFromURL_HTTPS_WithInvalidCAFile_ReadError(t *testing.T) {
 	// file does not exist -> read error
-	tmp := filepath.Join(os.TempDir(), "nonexistent-ca.pem")
+	tmp := filepath.Join(os.TempDir(), "nonexistent-ca.pem") //NOSONAR go:S5445
 	cfg := createConfig("https://localhost:15672", "user", "pass", false, tmp)
 	c, err := CreateMgmtClientFromURL(cfg)
 	assert.Nil(t, c)
@@ -175,6 +176,6 @@ var (
 func init() {
 	// ensure TLS works for valid-ish tests (if they rely on default transport)
 	if tr, ok := http.DefaultTransport.(*http.Transport); ok {
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //NOSONAR go:S4830 go:S5527
 	}
 }
