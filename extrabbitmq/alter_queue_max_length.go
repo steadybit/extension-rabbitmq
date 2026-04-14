@@ -88,17 +88,17 @@ func (a *AlterQueueMaxLengthAttack) Describe() action_kit_api.ActionDescription 
 		Label:       "Alter Queue Max Length",
 		Description: "Dynamically set a queue max length via a RabbitMQ policy. Creates a policy that matches the target queue and deletes it on stop.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(rabbitMQIcon),
-		Technology:  extutil.Ptr("RabbitMQ"),
-		Category:    extutil.Ptr("RabbitMQ"),
+		Icon:        new(rabbitMQIcon),
+		Technology:  new("RabbitMQ"),
+		Category:    new("RabbitMQ"),
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlExternal,
-		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
+		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType: queueTargetId,
-			SelectionTemplates: extutil.Ptr([]action_kit_api.TargetSelectionTemplate{
+			SelectionTemplates: new([]action_kit_api.TargetSelectionTemplate{
 				{
 					Label:       "queue name",
-					Description: extutil.Ptr("Select queue by name"),
+					Description: new("Select queue by name"),
 					Query:       "rabbitmq.queue.name=\"\"",
 				},
 			}),
@@ -109,10 +109,10 @@ func (a *AlterQueueMaxLengthAttack) Describe() action_kit_api.ActionDescription 
 			{
 				Name:         "maxLength",
 				Label:        "Max Length",
-				Description:  extutil.Ptr("Maximum number of messages the queue will hold. Set 0 for unlimited."),
+				Description:  new("Maximum number of messages the queue will hold. Set 0 for unlimited."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
-				DefaultValue: extutil.Ptr("1000"),
-				Required:     extutil.Ptr(true),
+				DefaultValue: new("1000"),
+				Required:     new(true),
 			},
 		},
 	}
@@ -148,7 +148,7 @@ func (a *AlterQueueMaxLengthAttack) Start(ctx context.Context, state *AlterQueue
 	// RabbitMQ policy regex is applied against resource name, so anchor it
 	pattern := fmt.Sprintf("^%s$", rabbitsafeRegex(state.Queue))
 
-	def := map[string]interface{}{
+	def := map[string]any{
 		"max-length": state.TargetMaxLength,
 	}
 

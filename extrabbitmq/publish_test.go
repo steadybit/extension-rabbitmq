@@ -122,7 +122,7 @@ func Test_stopAndCloseJobs_noRace(t *testing.T) {
 	// Regression test: stop() must wait for the ticker goroutine to exit
 	// before closing the jobs channel, otherwise we get "send on closed channel" panic.
 	// Run with -race and -count=100 for best coverage.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		erd := &ExecutionRunData{
 			stopTicker: make(chan bool),
 			jobs:       make(chan time.Time, 1),
@@ -172,7 +172,7 @@ func Test_tickerGoroutine_doesNotBlockOnFullJobsChannel(t *testing.T) {
 	// Regression test: if no workers are consuming jobs (e.g. all died from
 	// connection failures), the ticker goroutine must not block forever on
 	// jobs <- t. The nested select on stopTicker must allow it to exit.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		erd := &ExecutionRunData{
 			stopTicker: make(chan bool),
 			jobs:       make(chan time.Time, 1), // buffer of 1
@@ -218,7 +218,7 @@ func Test_tickerGoroutine_doesNotBlockOnFullJobsChannel(t *testing.T) {
 func Test_firstSendSelect_unblockOnStop(t *testing.T) {
 	// Unit test for the select pattern used in start() for the first message send.
 	// If the jobs channel is full and stopTicker is closed, the send must not block.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		jobs := make(chan time.Time) // unbuffered — send will block
 		stopCh := make(chan bool)
 

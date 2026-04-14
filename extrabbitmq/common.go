@@ -7,7 +7,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
-	"github.com/steadybit/extension-kit/extutil"
 	"testing"
 	"time"
 
@@ -24,61 +23,61 @@ var (
 	exchange = action_kit_api.ActionParameter{
 		Name:         "exchange",
 		Label:        "Exchange",
-		Description:  extutil.Ptr("By default it will be the queue unless you specify a specific exchange"),
+		Description:  new("By default it will be the queue unless you specify a specific exchange"),
 		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(false),
-		DefaultValue: extutil.Ptr(""),
+		Required:     new(false),
+		DefaultValue: new(""),
 	}
 	routingKey = action_kit_api.ActionParameter{
 		Name:         "routingKey",
 		Label:        "Routing Key",
-		Description:  extutil.Ptr("Optional routing key used for message delivery; defaults to the queue name if empty."),
+		Description:  new("Optional routing key used for message delivery; defaults to the queue name if empty."),
 		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(false),
-		DefaultValue: extutil.Ptr(""),
+		Required:     new(false),
+		DefaultValue: new(""),
 	}
 	body = action_kit_api.ActionParameter{
 		Name:         "body",
 		Label:        "Message body",
 		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     extutil.Ptr(true),
-		DefaultValue: extutil.Ptr("test-message"),
+		Required:     new(true),
+		DefaultValue: new("test-message"),
 	}
 	headers = action_kit_api.ActionParameter{
 		Name:        "headers",
 		Label:       "Message Headers",
-		Required:    extutil.Ptr(false),
-		Description: extutil.Ptr("Message headers to include in AMQP properties."),
+		Required:    new(false),
+		Description: new("Message headers to include in AMQP properties."),
 		Type:        action_kit_api.ActionParameterTypeKeyValue,
 	}
 	durationAlter = action_kit_api.ActionParameter{
 		Label:        "Duration",
-		Description:  extutil.Ptr("The duration of the action. The policy will be reverted at the end of the action."),
+		Description:  new("The duration of the action. The policy will be reverted at the end of the action."),
 		Name:         "duration",
 		Type:         action_kit_api.ActionParameterTypeDuration,
-		DefaultValue: extutil.Ptr("60s"),
-		Required:     extutil.Ptr(true),
+		DefaultValue: new("60s"),
+		Required:     new(true),
 	}
 	successRate = action_kit_api.ActionParameter{
 		Name:         "successRate",
 		Label:        "Required Success Rate",
-		Description:  extutil.Ptr("How many percent of the records must be at least successful (in terms of the following response verifications) to continue the experiment execution? The result will be evaluated and the end of the given duration."),
+		Description:  new("How many percent of the records must be at least successful (in terms of the following response verifications) to continue the experiment execution? The result will be evaluated and the end of the given duration."),
 		Type:         action_kit_api.ActionParameterTypePercentage,
-		DefaultValue: extutil.Ptr("100"),
-		Required:     extutil.Ptr(true),
-		MinValue:     extutil.Ptr(0),
-		MaxValue:     extutil.Ptr(100),
+		DefaultValue: new("100"),
+		Required:     new(true),
+		MinValue:     new(0),
+		MaxValue:     new(100),
 	}
 	maxConcurrent = action_kit_api.ActionParameter{
 		Name:         "maxConcurrent",
 		Label:        "Max concurrent requests",
-		Description:  extutil.Ptr("Maximum count on parallel producing requests. (min 1, max 10)"),
+		Description:  new("Maximum count on parallel producing requests. (min 1, max 10)"),
 		Type:         action_kit_api.ActionParameterTypeInteger,
-		DefaultValue: extutil.Ptr("1"),
-		MinValue:     extutil.Ptr(1),
-		MaxValue:     extutil.Ptr(10),
-		Required:     extutil.Ptr(true),
-		Advanced:     extutil.Ptr(true),
+		DefaultValue: new("1"),
+		MinValue:     new(1),
+		MaxValue:     new(10),
+		Required:     new(true),
+		Advanced:     new(true),
 	}
 )
 

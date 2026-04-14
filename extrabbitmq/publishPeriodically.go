@@ -36,12 +36,12 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 		Label:       "Publish (Messages / s)",
 		Description: "Publish X messages per second for a given duration.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(rabbitMQIcon),
-		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
+		Icon:        new(rabbitMQIcon),
+		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType: queueTargetId,
 		}),
-		Technology:  extutil.Ptr("RabbitMQ"),
-		Category:    extutil.Ptr("RabbitMQ"),
+		Technology:  new("RabbitMQ"),
+		Category:    new("RabbitMQ"),
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlExternal,
 		Parameters: []action_kit_api.ActionParameter{
@@ -52,27 +52,27 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 			{
 				Name:         "messagesPerSecond",
 				Label:        "Messages per second",
-				Description:  extutil.Ptr("The number of messages per second. Should be between 1 and 10."),
+				Description:  new("The number of messages per second. Should be between 1 and 10."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
-				DefaultValue: extutil.Ptr("1"),
-				MinValue:     extutil.Ptr(1),
-				MaxValue:     extutil.Ptr(10),
-				Required:     extutil.Ptr(true),
+				DefaultValue: new("1"),
+				MinValue:     new(1),
+				MaxValue:     new(10),
+				Required:     new(true),
 			},
 			{
 				Name:         "duration",
 				Label:        "Duration (seconds)",
 				Type:         action_kit_api.ActionParameterTypeInteger,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("30"),
+				Required:     new(true),
+				DefaultValue: new("30"),
 			},
 			successRate,
 			maxConcurrent,
 		},
-		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("1s"),
+		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{
+			CallInterval: new("1s"),
 		}),
-		Stop: extutil.Ptr(action_kit_api.MutatingEndpointReference{}),
+		Stop: new(action_kit_api.MutatingEndpointReference{}),
 	}
 }
 
@@ -104,7 +104,7 @@ func (a *publishRabbitPeriodicallyAction) Status(ctx context.Context, state *Pub
 	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
 	return &action_kit_api.StatusResult{
 		Completed: false,
-		Metrics:   extutil.Ptr(latestMetrics),
+		Metrics:   new(latestMetrics),
 	}, nil
 }
 

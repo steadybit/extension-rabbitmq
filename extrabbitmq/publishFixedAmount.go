@@ -35,12 +35,12 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 		Label:       "Publish (# of Messages)",
 		Description: "Publish a fixed number of messages.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(rabbitMQIcon),
-		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
+		Icon:        new(rabbitMQIcon),
+		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType: queueTargetId,
 		}),
-		Technology:  extutil.Ptr("RabbitMQ"),
-		Category:    extutil.Ptr("RabbitMQ"),
+		Technology:  new("RabbitMQ"),
+		Category:    new("RabbitMQ"),
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlInternal,
 		Parameters: []action_kit_api.ActionParameter{
@@ -52,22 +52,22 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 				Name:         "numberOfMessages",
 				Label:        "Number of Messages",
 				Type:         action_kit_api.ActionParameterTypeInteger,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("1"),
+				Required:     new(true),
+				DefaultValue: new("1"),
 			},
 			{
 				Name:         "duration",
 				Label:        "Duration (seconds)",
 				Type:         action_kit_api.ActionParameterTypeInteger,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("30"),
+				Required:     new(true),
+				DefaultValue: new("30"),
 			},
 			maxConcurrent,
 		},
-		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("1s"),
+		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{
+			CallInterval: new("1s"),
 		}),
-		Stop: extutil.Ptr(action_kit_api.MutatingEndpointReference{}),
+		Stop: new(action_kit_api.MutatingEndpointReference{}),
 	}
 }
 
@@ -117,7 +117,7 @@ func (a *publishRabbitFixedAmountAction) Status(ctx context.Context, state *Publ
 	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
 	return &action_kit_api.StatusResult{
 		Completed: completed,
-		Metrics:   extutil.Ptr(latestMetrics),
+		Metrics:   new(latestMetrics),
 	}, nil
 }
 

@@ -56,41 +56,41 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 		Label:       "Check Queue Backlog",
 		Description: "Check the backlog of a RabbitMQ queue (total messages in queue). Fails if backlog exceeds the threshold during the check window.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(rabbitMQIcon),
-		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
+		Icon:        new(rabbitMQIcon),
+		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType:          rabbitQueueTargetId,
 			QuantityRestriction: extutil.Ptr(action_kit_api.QuantityRestrictionAll),
-			SelectionTemplates: extutil.Ptr([]action_kit_api.TargetSelectionTemplate{
+			SelectionTemplates: new([]action_kit_api.TargetSelectionTemplate{
 				{
 					Label:       "queue name",
-					Description: extutil.Ptr("Find queue by name"),
+					Description: new("Find queue by name"),
 					Query:       "rabbitmq.queue.name=\"\"",
 				},
 			}),
 		}),
-		Technology:  extutil.Ptr("RabbitMQ"),
-		Category:    extutil.Ptr("RabbitMQ"),
+		Technology:  new("RabbitMQ"),
+		Category:    new("RabbitMQ"),
 		Kind:        action_kit_api.Check,
 		TimeControl: action_kit_api.TimeControlInternal,
 		Parameters: []action_kit_api.ActionParameter{
 			{
 				Name:         "duration",
 				Label:        "Duration",
-				Description:  extutil.Ptr("How long to observe the queue backlog"),
+				Description:  new("How long to observe the queue backlog"),
 				Type:         action_kit_api.ActionParameterTypeDuration,
-				DefaultValue: extutil.Ptr("30s"),
-				Required:     extutil.Ptr(true),
+				DefaultValue: new("30s"),
+				Required:     new(true),
 			},
 			{
 				Name:         "acceptableBacklog",
 				Label:        "Backlog alert threshold",
-				Description:  extutil.Ptr("Maximum acceptable number of messages in the queue"),
+				Description:  new("Maximum acceptable number of messages in the queue"),
 				Type:         action_kit_api.ActionParameterTypeInteger,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("10"),
+				Required:     new(true),
+				DefaultValue: new("10"),
 			},
 		},
-		Widgets: extutil.Ptr([]action_kit_api.Widget{
+		Widgets: new([]action_kit_api.Widget{
 			action_kit_api.LineChartWidget{
 				Type:  action_kit_api.ComSteadybitWidgetLineChart,
 				Title: "Queue Backlog",
@@ -99,8 +99,8 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 					From:       "id",
 					Mode:       action_kit_api.ComSteadybitWidgetLineChartIdentityModeSelect,
 				},
-				Grouping: extutil.Ptr(action_kit_api.LineChartWidgetGroupingConfig{
-					ShowSummary: extutil.Ptr(true),
+				Grouping: new(action_kit_api.LineChartWidgetGroupingConfig{
+					ShowSummary: new(true),
 					Groups: []action_kit_api.LineChartWidgetGroup{
 						{
 							Title: "Under Threshold",
@@ -120,8 +120,8 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 						},
 					},
 				}),
-				Tooltip: extutil.Ptr(action_kit_api.LineChartWidgetTooltipConfig{
-					MetricValueTitle: extutil.Ptr("Messages"),
+				Tooltip: new(action_kit_api.LineChartWidgetTooltipConfig{
+					MetricValueTitle: new("Messages"),
 					AdditionalContent: []action_kit_api.LineChartWidgetTooltipContent{
 						{From: "queue", Title: "Queue"},
 						{From: "vhost", Title: "Vhost"},
@@ -129,8 +129,8 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 				}),
 			},
 		}),
-		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("2s"),
+		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{
+			CallInterval: new("2s"),
 		}),
 	}
 }
@@ -176,12 +176,12 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 	}
 	c, err := clients.CreateMgmtClientFromURL(managementEndpoint)
 	if err != nil {
-		return nil, extutil.Ptr(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
+		return nil, new(extension_kit.ToError("no initialized client for target endpoint", errors.New("client not found")))
 	}
 
 	qi, err := c.GetQueue(state.Vhost, state.Queue)
 	if err != nil {
-		return nil, extutil.Ptr(extension_kit.ToError(fmt.Sprintf("failed to retrieve queue %s in vhost %s: %v", state.Queue, state.Vhost, err), err))
+		return nil, new(extension_kit.ToError(fmt.Sprintf("failed to retrieve queue %s in vhost %s: %v", state.Queue, state.Vhost, err), err))
 	}
 
 	// RabbitMQ reports:
@@ -198,7 +198,7 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 		state.StateCheckFailed = true
 	}
 	if completed && state.StateCheckFailed {
-		checkError = extutil.Ptr(action_kit_api.ActionKitError{
+		checkError = new(action_kit_api.ActionKitError{
 			Title:  fmt.Sprintf("Queue backlog exceeded threshold %d at least once.", state.AcceptableBacklog),
 			Status: extutil.Ptr(action_kit_api.Failed),
 		})
@@ -211,13 +211,13 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 	return &action_kit_api.StatusResult{
 		Completed: completed,
 		Error:     checkError,
-		Metrics:   extutil.Ptr(metrics),
+		Metrics:   new(metrics),
 	}, nil
 }
 
 func toQueueMetric(backlog int, state *QueueBacklogCheckState, now time.Time) *action_kit_api.Metric {
-	return extutil.Ptr(action_kit_api.Metric{
-		Name: extutil.Ptr("rabbitmq_queue_backlog"),
+	return new(action_kit_api.Metric{
+		Name: new("rabbitmq_queue_backlog"),
 		Metric: map[string]string{
 			"backlog_constraints_fulfilled": strconv.FormatBool(int64(backlog) <= state.AcceptableBacklog),
 			"queue":                         state.Queue,

@@ -63,7 +63,7 @@ func TestAlterQueueMaxLength_Prepare_SetsState(t *testing.T) {
 	state := a.NewEmptyState()
 
 	req := action_kit_api.PrepareActionRequestBody{
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"duration":  float64(30_000),
 			"maxLength": float64(123),
 		},
@@ -92,7 +92,7 @@ func TestAlterQueueMaxLength_Prepare_MissingAttrPanics(t *testing.T) {
 	a := NewAlterQueueMaxLengthAttack()
 	state := a.NewEmptyState()
 	req := action_kit_api.PrepareActionRequestBody{
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"duration":  float64(10_000),
 			"maxLength": float64(1),
 		},

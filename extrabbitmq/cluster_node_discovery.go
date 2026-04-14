@@ -14,7 +14,6 @@ import (
 	"github.com/steadybit/discovery-kit/go/discovery_kit_commons"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
-	"github.com/steadybit/extension-kit/extutil"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 )
@@ -41,7 +40,7 @@ func (r *rabbitNodeDiscovery) Describe() discovery_kit_api.DiscoveryDescription 
 	return discovery_kit_api.DiscoveryDescription{
 		Id: nodeTargetId,
 		Discover: discovery_kit_api.DescribingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr(fmt.Sprintf("%ds", config.Config.DiscoveryIntervalNodeSeconds)),
+			CallInterval: new(fmt.Sprintf("%ds", config.Config.DiscoveryIntervalNodeSeconds)),
 		},
 	}
 }
@@ -50,9 +49,9 @@ func (r *rabbitNodeDiscovery) DescribeTarget() discovery_kit_api.TargetDescripti
 	return discovery_kit_api.TargetDescription{
 		Id:       nodeTargetId,
 		Label:    discovery_kit_api.PluralLabel{One: "RabbitMQ Node", Other: "RabbitMQ Nodes"},
-		Category: extutil.Ptr("rabbitmq"),
+		Category: new("rabbitmq"),
 		Version:  extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:     extutil.Ptr(rabbitMQIcon),
+		Icon:     new(rabbitMQIcon),
 		Table: discovery_kit_api.Table{
 			Columns: []discovery_kit_api.Column{
 				{Attribute: "steadybit.label"},
