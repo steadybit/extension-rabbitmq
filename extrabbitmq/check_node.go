@@ -69,17 +69,17 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 		Label:       "Check Nodes",
 		Description: "Observe RabbitMQ node/cluster changes during failures or restarts.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
-		Icon:        extutil.Ptr(rabbitMQIcon), // reuse your icon
-		Technology:  extutil.Ptr("RabbitMQ"),
-		Category:    extutil.Ptr("RabbitMQ"),
+		Icon:        new(rabbitMQIcon), // reuse your icon
+		Technology:  new("RabbitMQ"),
+		Category:    new("RabbitMQ"),
 		Kind:        action_kit_api.Check,
 		TimeControl: action_kit_api.TimeControlInternal,
-		TargetSelection: extutil.Ptr(action_kit_api.TargetSelection{
+		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType: rabbitNodeTargetId,
-			SelectionTemplates: extutil.Ptr([]action_kit_api.TargetSelectionTemplate{
+			SelectionTemplates: new([]action_kit_api.TargetSelectionTemplate{
 				{
 					Label:       "by node name",
-					Description: extutil.Ptr("Find nodes by name"),
+					Description: new("Find nodes by name"),
 					Query:       `rabbitmq.node.name=""`,
 				},
 			}),
@@ -89,14 +89,14 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				Name:         "duration",
 				Label:        "Duration",
 				Type:         action_kit_api.ActionParameterTypeDuration,
-				DefaultValue: extutil.Ptr("30s"),
-				Required:     extutil.Ptr(true),
+				DefaultValue: new("30s"),
+				Required:     new(true),
 			},
 			{
 				Name:  "expectedChanges",
 				Label: "Expected Changes",
 				Type:  action_kit_api.ActionParameterTypeStringArray,
-				Options: extutil.Ptr([]action_kit_api.ParameterOption{
+				Options: new([]action_kit_api.ParameterOption{
 					action_kit_api.ExplicitParameterOption{Label: "Node down", Value: NodeDown},
 					action_kit_api.ExplicitParameterOption{Label: "Node alarm raised", Value: NodeAlarmRaised},
 				}),
@@ -105,15 +105,15 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				Name:         "changeCheckMode",
 				Label:        "Change Check Mode",
 				Type:         action_kit_api.ActionParameterTypeString,
-				DefaultValue: extutil.Ptr(stateCheckModeAllTheTime),
-				Options: extutil.Ptr([]action_kit_api.ParameterOption{
+				DefaultValue: new(stateCheckModeAllTheTime),
+				Options: new([]action_kit_api.ParameterOption{
 					action_kit_api.ExplicitParameterOption{Label: "All the time", Value: stateCheckModeAllTheTime},
 					action_kit_api.ExplicitParameterOption{Label: "At least once", Value: stateCheckModeAtLeastOnce},
 				}),
-				Required: extutil.Ptr(true),
+				Required: new(true),
 			},
 		},
-		Widgets: extutil.Ptr([]action_kit_api.Widget{
+		Widgets: new([]action_kit_api.Widget{
 			action_kit_api.StateOverTimeWidget{
 				Type:  action_kit_api.ComSteadybitWidgetStateOverTime,
 				Title: "RabbitMQ Node Changes",
@@ -129,16 +129,16 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				Tooltip: action_kit_api.StateOverTimeWidgetTooltipConfig{
 					From: "tooltip",
 				},
-				Url: extutil.Ptr(action_kit_api.StateOverTimeWidgetUrlConfig{
-					From: extutil.Ptr("url"),
+				Url: new(action_kit_api.StateOverTimeWidgetUrlConfig{
+					From: new("url"),
 				}),
-				Value: extutil.Ptr(action_kit_api.StateOverTimeWidgetValueConfig{
-					Hide: extutil.Ptr(true),
+				Value: new(action_kit_api.StateOverTimeWidgetValueConfig{
+					Hide: new(true),
 				}),
 			},
 		}),
-		Status: extutil.Ptr(action_kit_api.MutatingEndpointReferenceWithCallInterval{
-			CallInterval: extutil.Ptr("2s"),
+		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{
+			CallInterval: new("2s"),
 		}),
 	}
 }
@@ -177,7 +177,7 @@ func (a *CheckNodesAction) Prepare(ctx context.Context, state *CheckNodesState, 
 	for _, name := range state.NodeNames {
 		n, err := client.GetNode(name)
 		if err != nil {
-			return nil, extutil.Ptr(extension_kit.ToError(fmt.Sprintf("Failed to get node %s from RabbitMQ.", name), err))
+			return nil, new(extension_kit.ToError(fmt.Sprintf("Failed to get node %s from RabbitMQ.", name), err))
 		}
 		state.BaselineRunning[n.Name] = n.IsRunning
 		state.BaselineAlarms[n.Name] = n.MemAlarm || n.DiskFreeAlarm
@@ -248,14 +248,14 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		case stateCheckModeAllTheTime:
 			for _, c := range changeKeys {
 				if !slices.Contains(state.ExpectedChanges, c) {
-					checkErr = extutil.Ptr(action_kit_api.ActionKitError{
+					checkErr = new(action_kit_api.ActionKitError{
 						Title:  fmt.Sprintf("Nodes got an unexpected change '%s' whereas '%v' is expected.", c, state.ExpectedChanges),
 						Status: extutil.Ptr(action_kit_api.Failed),
 					})
 				}
 			}
 			if completed && checkErr == nil && len(changeKeys) == 0 {
-				checkErr = extutil.Ptr(action_kit_api.ActionKitError{
+				checkErr = new(action_kit_api.ActionKitError{
 					Title:  fmt.Sprintf("Nodes didn't get the expected changes '%v'.", state.ExpectedChanges),
 					Status: extutil.Ptr(action_kit_api.Failed),
 				})
@@ -267,7 +267,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 				}
 			}
 			if completed && !state.StateCheckOnce {
-				checkErr = extutil.Ptr(action_kit_api.ActionKitError{
+				checkErr = new(action_kit_api.ActionKitError{
 					Title:  fmt.Sprintf("Nodes didn't get the expected changes '%v' at least once.", state.ExpectedChanges),
 					Status: extutil.Ptr(action_kit_api.Failed),
 				})
@@ -275,12 +275,13 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		}
 	} else {
 		if len(changeKeys) > 0 {
-			changesSummary := "changes:"
+			var changesSummary strings.Builder
+			changesSummary.WriteString("changes:")
 			for _, c := range changeKeys {
-				changesSummary += fmt.Sprintf(" %s", c)
+				changesSummary.WriteString(fmt.Sprintf(" %s", c))
 			}
-			checkErr = extutil.Ptr(action_kit_api.ActionKitError{
-				Title:  fmt.Sprintf("We were expecting no events but got these %s.", changesSummary),
+			checkErr = new(action_kit_api.ActionKitError{
+				Title:  fmt.Sprintf("We were expecting no events but got these %s.", changesSummary.String()),
 				Status: extutil.Ptr(action_kit_api.Failed),
 			})
 		}
@@ -293,7 +294,7 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 	return &action_kit_api.StatusResult{
 		Completed: completed,
 		Error:     checkErr,
-		Metrics:   extutil.Ptr(metrics),
+		Metrics:   new(metrics),
 	}, nil
 }
 
@@ -301,21 +302,22 @@ func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes 
 	var tooltip, st string
 
 	if len(changes) > 0 {
-		recap := "NODE ACTIVITY"
+		var recap strings.Builder
+		recap.WriteString("NODE ACTIVITY")
 		keys := make([]string, 0, len(changes))
 		for k := range changes {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			recap += "\n" + k + ":\n"
+			recap.WriteString("\n" + k + ":\n")
 			vals := changes[k]
 			sort.Strings(vals)
 			for _, v := range vals {
-				recap += v + "\n"
+				recap.WriteString(v + "\n")
 			}
 		}
-		tooltip = recap
+		tooltip = recap.String()
 
 		sort.Strings(expected)
 		sort.Strings(changeNames)
@@ -331,8 +333,8 @@ func toNodeChangeMetric(mgmtURL string, expected, changeNames []string, changes 
 		st = "info"
 	}
 
-	return extutil.Ptr(action_kit_api.Metric{
-		Name: extutil.Ptr("rabbit_node_state"),
+	return new(action_kit_api.Metric{
+		Name: new("rabbit_node_state"),
 		Metric: map[string]string{
 			"metric.id": fmt.Sprintf("Expected: %s", strings.Join(expected, ",")),
 			"url":       mgmtURL,

@@ -130,22 +130,22 @@ func Test_toQueueTarget_MaxLength_Extraction(t *testing.T) {
 	cluster := "c1"
 
 	t.Run("float64", func(t *testing.T) {
-		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]interface{}{"x-max-length": float64(123)}}
+		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]any{"x-max-length": float64(123)}}
 		tgt := toQueueTarget(mgmt, amqp, q, cluster)
 		assert.Equal(t, []string{"123"}, tgt.Attributes["rabbitmq.queue.max_length"])
 	})
 	t.Run("int", func(t *testing.T) {
-		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]interface{}{"x-max-length": int(456)}}
+		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]any{"x-max-length": int(456)}}
 		tgt := toQueueTarget(mgmt, amqp, q, cluster)
 		assert.Equal(t, []string{"456"}, tgt.Attributes["rabbitmq.queue.max_length"])
 	})
 	t.Run("int64", func(t *testing.T) {
-		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]interface{}{"x-max-length": int64(789)}}
+		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]any{"x-max-length": int64(789)}}
 		tgt := toQueueTarget(mgmt, amqp, q, cluster)
 		assert.Equal(t, []string{"789"}, tgt.Attributes["rabbitmq.queue.max_length"])
 	})
 	t.Run("string", func(t *testing.T) {
-		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]interface{}{"x-max-length": "42"}}
+		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]any{"x-max-length": "42"}}
 		tgt := toQueueTarget(mgmt, amqp, q, cluster)
 		assert.Equal(t, []string{"42"}, tgt.Attributes["rabbitmq.queue.max_length"])
 	})
@@ -155,7 +155,7 @@ func Test_toQueueTarget_MaxLength_Extraction(t *testing.T) {
 		assert.Equal(t, []string{"unlimited"}, tgt.Attributes["rabbitmq.queue.max_length"])
 	})
 	t.Run("other type -> fmt", func(t *testing.T) {
-		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]interface{}{"x-max-length": []int{1, 2}}}
+		q := rabbithole.QueueInfo{Vhost: "v", Name: "q", Status: "running", Arguments: map[string]any{"x-max-length": []int{1, 2}}}
 		tgt := toQueueTarget(mgmt, amqp, q, cluster)
 		assert.Equal(t, []string{"[1 2]"}, tgt.Attributes["rabbitmq.queue.max_length"])
 	})
@@ -235,7 +235,7 @@ func Test_getAllQueues_SingleEndpoint_OK(t *testing.T) {
 	defer func() { config.Config.ManagementEndpoints = orig }()
 
 	queues := []rabbithole.QueueInfo{
-		{Vhost: "order", Name: "q1", Status: "running", Arguments: map[string]interface{}{"x-max-length": 100.0}},
+		{Vhost: "order", Name: "q1", Status: "running", Arguments: map[string]any{"x-max-length": 100.0}},
 		{Vhost: "order", Name: "q2", Status: "idle"},
 	}
 	s := mockQueueMgmtServer(t, queues, "cluster-A")

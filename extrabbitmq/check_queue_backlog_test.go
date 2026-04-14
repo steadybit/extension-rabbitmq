@@ -145,7 +145,7 @@ func TestToQueueMetric_BelowThreshold_SetsFulfilledTrue(t *testing.T) {
 
 	// Then
 	require.NotNil(t, m)
-	assert.Equal(t, extutil.Ptr("rabbitmq_queue_backlog"), m.Name)
+	assert.Equal(t, new("rabbitmq_queue_backlog"), m.Name)
 	assert.Equal(t, "true", m.Metric["backlog_constraints_fulfilled"])
 	assert.Equal(t, "q1", m.Metric["queue"])
 	assert.Equal(t, "/", m.Metric["vhost"])
