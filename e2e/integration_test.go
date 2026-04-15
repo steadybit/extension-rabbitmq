@@ -107,7 +107,7 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 		"--create-namespace",
 		"my-rabbitmq", "bitnami/rabbitmq",
 		"--set", "auth.username=user",
-		"--set", "auth.password=bitnami",
+		"--set", "auth.password=bitnami", //NOSONAR go:S2068
 		"--set", "metrics.enabled=true",
 		"--set", "image.repository=bitnamilegacy/rabbitmq",
 		"--set", "image.tag=4.1.3-debian-12-r0",
@@ -115,7 +115,7 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 		"--wait",
 		"--timeout=10m0s",
 	}
-	if out, err := exec.Command("helm", args...).CombinedOutput(); err != nil { //NOSONAR go:S4036 go:S2068
+	if out, err := exec.Command("helm", args...).CombinedOutput(); err != nil { //NOSONAR go:S4036
 		return fmt.Errorf("failed to install rabbitmq chart: %s: %s", err, string(out))
 	}
 
