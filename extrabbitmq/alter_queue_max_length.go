@@ -86,7 +86,7 @@ func (a *AlterQueueMaxLengthAttack) Describe() action_kit_api.ActionDescription 
 	return action_kit_api.ActionDescription{
 		Id:          fmt.Sprintf("%s.alter-max-length", queueTargetId),
 		Label:       "Alter Queue Max Length",
-		Description: "Dynamically set a queue max length via a RabbitMQ policy. Creates a policy that matches the target queue and deletes it on stop.",
+		Description: "Limit the maximum number of messages a queue can hold by creating a temporary RabbitMQ policy. The policy is removed when the attack ends.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        new(rabbitMQIcon),
 		Technology:  new("RabbitMQ"),
@@ -109,7 +109,7 @@ func (a *AlterQueueMaxLengthAttack) Describe() action_kit_api.ActionDescription 
 			{
 				Name:         "maxLength",
 				Label:        "Max Length",
-				Description:  new("Maximum number of messages the queue will hold. Set 0 for unlimited."),
+				Description:  new("Maximum number of messages the queue will hold. Messages beyond this limit are dropped or dead-lettered. Set 0 for unlimited."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				DefaultValue: new("1000"),
 				Required:     new(true),

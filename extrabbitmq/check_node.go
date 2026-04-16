@@ -67,7 +67,7 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
 		Id:          fmt.Sprintf("%s.check", rabbitNodeTargetId),
 		Label:       "Check Nodes",
-		Description: "Observe RabbitMQ node/cluster changes during failures or restarts.",
+		Description: "Monitor RabbitMQ node-level events (node going down, alarms raised) during an experiment. For queue-level monitoring, use Check Queue Backlog instead.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        new(rabbitMQIcon), // reuse your icon
 		Technology:  new("RabbitMQ"),
@@ -88,14 +88,16 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 			{
 				Name:         "duration",
 				Label:        "Duration",
+				Description:  new("How long the check runs. Node state is polled continuously for this duration."),
 				Type:         action_kit_api.ActionParameterTypeDuration,
 				DefaultValue: new("30s"),
 				Required:     new(true),
 			},
 			{
-				Name:  "expectedChanges",
-				Label: "Expected Changes",
-				Type:  action_kit_api.ActionParameterTypeStringArray,
+				Name:        "expectedChanges",
+				Label:       "Expected Changes",
+				Description: new("Which node-level changes to watch for. If left empty, any node change triggers the check."),
+				Type:        action_kit_api.ActionParameterTypeStringArray,
 				Options: new([]action_kit_api.ParameterOption{
 					action_kit_api.ExplicitParameterOption{Label: "Node down", Value: NodeDown},
 					action_kit_api.ExplicitParameterOption{Label: "Node alarm raised", Value: NodeAlarmRaised},
@@ -104,6 +106,7 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 			{
 				Name:         "changeCheckMode",
 				Label:        "Change Check Mode",
+				Description:  new("How expected changes are evaluated. 'All the time': every poll must detect it. 'At least once': observed once during the duration."),
 				Type:         action_kit_api.ActionParameterTypeString,
 				DefaultValue: new(stateCheckModeAllTheTime),
 				Options: new([]action_kit_api.ParameterOption{

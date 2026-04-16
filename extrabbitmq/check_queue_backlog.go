@@ -54,7 +54,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 	return action_kit_api.ActionDescription{
 		Id:          fmt.Sprintf("%s.check-backlog", rabbitQueueTargetId),
 		Label:       "Check Queue Backlog",
-		Description: "Check the backlog of a RabbitMQ queue (total messages in queue). Fails if backlog exceeds the threshold during the check window.",
+		Description: "Monitor the total message count (backlog) in a RabbitMQ queue and fail the experiment if it exceeds a threshold. For node-level monitoring (downtime, alarms), use Check Nodes instead.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        new(rabbitMQIcon),
 		TargetSelection: new(action_kit_api.TargetSelection{
@@ -76,7 +76,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 			{
 				Name:         "duration",
 				Label:        "Duration",
-				Description:  new("How long to observe the queue backlog"),
+				Description:  new("How long the check runs. Queue backlog is polled continuously for this duration."),
 				Type:         action_kit_api.ActionParameterTypeDuration,
 				DefaultValue: new("30s"),
 				Required:     new(true),
@@ -84,7 +84,7 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 			{
 				Name:         "acceptableBacklog",
 				Label:        "Backlog alert threshold",
-				Description:  new("Maximum acceptable number of messages in the queue"),
+				Description:  new("Maximum acceptable message count in the queue. If backlog exceeds this value, the experiment fails."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("10"),

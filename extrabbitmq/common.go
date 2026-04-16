@@ -23,7 +23,7 @@ var (
 	exchange = action_kit_api.ActionParameter{
 		Name:         "exchange",
 		Label:        "Exchange",
-		Description:  new("By default it will be the queue unless you specify a specific exchange"),
+		Description:  new("Optional. The AMQP exchange to publish to. If empty, messages go directly to the target queue via the default exchange."),
 		Type:         action_kit_api.ActionParameterTypeString,
 		Required:     new(false),
 		DefaultValue: new(""),
@@ -39,6 +39,7 @@ var (
 	body = action_kit_api.ActionParameter{
 		Name:         "body",
 		Label:        "Message body",
+		Description:  new("Required. The message body to publish. Every message uses this same value."),
 		Type:         action_kit_api.ActionParameterTypeString,
 		Required:     new(true),
 		DefaultValue: new("test-message"),
@@ -52,7 +53,7 @@ var (
 	}
 	durationAlter = action_kit_api.ActionParameter{
 		Label:        "Duration",
-		Description:  new("The duration of the action. The policy will be reverted at the end of the action."),
+		Description:  new("How long the policy stays in effect. The policy is automatically removed when the duration expires."),
 		Name:         "duration",
 		Type:         action_kit_api.ActionParameterTypeDuration,
 		DefaultValue: new("60s"),
@@ -61,7 +62,7 @@ var (
 	successRate = action_kit_api.ActionParameter{
 		Name:         "successRate",
 		Label:        "Required Success Rate",
-		Description:  new("How many percent of the records must be at least successful (in terms of the following response verifications) to continue the experiment execution? The result will be evaluated and the end of the given duration."),
+		Description:  new("Minimum percentage of messages that must be published without errors. If the success rate drops below this, the experiment fails."),
 		Type:         action_kit_api.ActionParameterTypePercentage,
 		DefaultValue: new("100"),
 		Required:     new(true),
@@ -71,7 +72,7 @@ var (
 	maxConcurrent = action_kit_api.ActionParameter{
 		Name:         "maxConcurrent",
 		Label:        "Max concurrent requests",
-		Description:  new("Maximum count on parallel producing requests. (min 1, max 10)"),
+		Description:  new("Maximum number of parallel publish requests in flight at once. Min: 1, Max: 10."),
 		Type:         action_kit_api.ActionParameterTypeInteger,
 		DefaultValue: new("1"),
 		MinValue:     new(1),
