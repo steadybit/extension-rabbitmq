@@ -20,7 +20,7 @@ func TestPublishRabbitFixedAmountAction_Describe(t *testing.T) {
 
 	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue.publish-fixed-amount", desc.Id)
 	assert.Equal(t, "Publish (# of Messages)", desc.Label)
-	assert.Equal(t, "Publish a fixed number of messages.", desc.Description)
+	assert.Equal(t, "Publish a fixed total number of messages to a queue, distributed evenly across the duration. For rate-based publishing (messages/second), use Publish (Messages / s) instead.", desc.Description)
 	assert.NotNil(t, desc.TargetSelection)
 	assert.Equal(t, "RabbitMQ", *desc.Technology)
 	assert.Equal(t, "RabbitMQ", *desc.Category)

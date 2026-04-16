@@ -33,7 +33,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 	return action_kit_api.ActionDescription{
 		Id:          "com.steadybit.extension_rabbitmq.queue.publish-fixed-amount",
 		Label:       "Publish (# of Messages)",
-		Description: "Publish a fixed number of messages.",
+		Description: "Publish a fixed total number of messages to a queue, distributed evenly across the duration. For rate-based publishing (messages/second), use Publish (Messages / s) instead.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        new(rabbitMQIcon),
 		TargetSelection: new(action_kit_api.TargetSelection{
@@ -51,6 +51,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 			{
 				Name:         "numberOfMessages",
 				Label:        "Number of Messages",
+				Description:  extutil.Ptr("Total number of messages to publish across the entire duration. The publishing rate is this value divided by the duration."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("1"),
@@ -58,6 +59,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 			{
 				Name:         "duration",
 				Label:        "Duration (seconds)",
+				Description:  extutil.Ptr("How long the publisher runs, in seconds. The total number of messages is distributed evenly across this duration."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("30"),

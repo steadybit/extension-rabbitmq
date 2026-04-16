@@ -25,7 +25,7 @@ func TestQueueBacklogCheck_Describe(t *testing.T) {
 
 	// Then
 	assert.Equal(t, "Check Queue Backlog", desc.Label)
-	assert.Equal(t, "Check the backlog of a RabbitMQ queue (total messages in queue). Fails if backlog exceeds the threshold during the check window.", desc.Description)
+	assert.Equal(t, "Monitor the total message count (backlog) in a RabbitMQ queue and fail the experiment if it exceeds a threshold. For node-level monitoring (downtime, alarms), use Check Nodes instead.", desc.Description)
 	assert.Equal(t, rabbitQueueTargetId+".check-backlog", desc.Id)
 	require.NotNil(t, desc.Status)
 	require.NotNil(t, desc.TargetSelection)

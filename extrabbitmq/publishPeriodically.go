@@ -34,7 +34,7 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 	return action_kit_api.ActionDescription{
 		Id:          "com.steadybit.extension_rabbitmq.queue.publish-periodically",
 		Label:       "Publish (Messages / s)",
-		Description: "Publish X messages per second for a given duration.",
+		Description: "Publish messages to a queue at a constant rate (messages per second) for the attack duration. For publishing a fixed total number of messages, use Publish (# of Messages) instead.",
 		Version:     extbuild.GetSemverVersionStringOrUnknown(),
 		Icon:        new(rabbitMQIcon),
 		TargetSelection: new(action_kit_api.TargetSelection{
@@ -62,6 +62,7 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 			{
 				Name:         "duration",
 				Label:        "Duration (seconds)",
+				Description:  extutil.Ptr("How long the publisher runs at the specified rate, in seconds. Total messages produced = rate x duration."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("30"),

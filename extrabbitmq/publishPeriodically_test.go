@@ -20,7 +20,7 @@ func TestPublishRabbitPeriodicallyAction_Describe(t *testing.T) {
 
 	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue.publish-periodically", desc.Id)
 	assert.Equal(t, "Publish (Messages / s)", desc.Label)
-	assert.Equal(t, "Publish X messages per second for a given duration.", desc.Description)
+	assert.Equal(t, "Publish messages to a queue at a constant rate (messages per second) for the attack duration. For publishing a fixed total number of messages, use Publish (# of Messages) instead.", desc.Description)
 	assert.NotNil(t, desc.TargetSelection)
 	assert.Equal(t, "RabbitMQ", *desc.Technology)
 	assert.Equal(t, "RabbitMQ", *desc.Category)
