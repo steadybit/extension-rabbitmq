@@ -12,6 +12,35 @@ entries:
           url: https://hub.steadybit.com
     apiVersion: v2
     appVersion: v1.0.12
+    created: "2026-05-21T06:16:08.739668027Z"
+    dependencies:
+    - name: extensionlib
+      repository: https://steadybit.github.io/helm-charts
+      version: ^1.5.2
+    description: Steadybit rabbitmq extension Helm chart for Kubernetes.
+    digest: 366b6ad497401611c61ae8c21dcddf04ca17d7aa7614d66dfdbac9143bc87448
+    home: https://www.steadybit.com/
+    icon: https://steadybit-website-assets.s3.amazonaws.com/logo-symbol-transparent.png
+    maintainers:
+    - email: daniel.reuter@steadybit.com
+      name: reuda
+    name: steadybit-extension-rabbitmq
+    sources:
+    - https://github.com/steadybit/extension-rabbitmq
+    urls:
+    - https://github.com/steadybit/extension-rabbitmq/releases/download/steadybit-extension-rabbitmq-1.0.21/steadybit-extension-rabbitmq-1.0.21.tgz
+    version: 1.0.21
+  - annotations:
+      artifacthub.io/images: |
+        - name: logo
+          image: https://steadybit-website-assets.s3.amazonaws.com/logo-symbol-transparent.png
+      artifacthub.io/links: |-
+        - name: Steadybit website
+          url: https://www.steadybit.com
+        - name: Steadybit reliability hub
+          url: https://hub.steadybit.com
+    apiVersion: v2
+    appVersion: v1.0.12
     created: "2026-05-12T15:44:49.103816891Z"
     dependencies:
     - name: extensionlib
@@ -639,4 +668,4 @@ entries:
     urls:
     - https://github.com/steadybit/extension-rabbitmq/releases/download/steadybit-extension-rabbitmq-0.0.2/steadybit-extension-rabbitmq-0.0.2.tgz
     version: 0.0.2
-generated: "2026-05-12T15:44:49.104008668Z"
+generated: "2026-05-21T06:16:08.739816301Z"
