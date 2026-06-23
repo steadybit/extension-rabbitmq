@@ -2,7 +2,6 @@
 
 ## v1.0.16
 
-- build: rename workflow_dispatch input labels for the GH UI
 - chore(deps): bump github.com/rabbitmq/amqp091-go from 1.11.0 to 1.12.0
 - chore(deps): bump github.com/steadybit/extension-kit
 - chore(deps): bump golang.org/x/net to v0.55.0 (CVE-2026-39821) (#27)
