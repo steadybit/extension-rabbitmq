@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- fix: guard the publish attack's jobs channel against being closed twice when stop runs concurrently/twice, which could panic the extension
+
 ## v1.0.16
 
 - chore(deps): bump github.com/rabbitmq/amqp091-go from 1.11.0 to 1.12.0

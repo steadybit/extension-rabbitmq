@@ -28,6 +28,7 @@ type ExecutionRunData struct {
 	requestCounter        atomic.Uint64              // stores the number of requests for each execution
 	requestSuccessCounter atomic.Uint64              // stores the number of successful requests for each execution
 	stopOnce              sync.Once                  // ensures ticker stop/close happens once
+	jobsCloseOnce         sync.Once                  // ensures the jobs channel is closed only once
 	tickerDone            chan struct{}              // closed when the ticker goroutine exits
 }
 
@@ -378,7 +379,11 @@ func stop(state *PublishMessageAttackState) (*action_kit_api.StopResult, error) 
 	if executionRunData.tickerDone != nil {
 		<-executionRunData.tickerDone
 	}
-	close(executionRunData.jobs)
+	// Guard against a concurrent/duplicate stop closing the jobs channel twice (which panics):
+	// two stop() calls can both load the run data before either deletes it from the map.
+	executionRunData.jobsCloseOnce.Do(func() {
+		close(executionRunData.jobs)
+	})
 
 	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
 	// calculate the success rate
