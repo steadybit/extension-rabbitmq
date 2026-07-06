@@ -10,7 +10,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.12.0
 	github.com/rs/zerolog v1.35.1
 	github.com/steadybit/action-kit/go/action_kit_api/v2 v2.10.5
-	github.com/steadybit/action-kit/go/action_kit_sdk v1.3.1
+	github.com/steadybit/action-kit/go/action_kit_sdk v1.3.2
 	github.com/steadybit/action-kit/go/action_kit_test v1.4.7
 	github.com/steadybit/advice-kit/go/advice_kit_api v1.2.4
 	github.com/steadybit/discovery-kit/go/discovery_kit_api v1.7.1
@@ -18,7 +18,7 @@ require (
 	github.com/steadybit/discovery-kit/go/discovery_kit_sdk v1.3.6
 	github.com/steadybit/discovery-kit/go/discovery_kit_test v1.2.1
 	github.com/steadybit/event-kit/go/event_kit_api v1.6.3
-	github.com/steadybit/extension-kit v1.10.5
+	github.com/steadybit/extension-kit v1.10.7
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/automaxprocs v1.6.0
 )
