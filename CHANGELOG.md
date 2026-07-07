@@ -1,8 +1,15 @@
 # Changelog
 
-## Unreleased
+## v1.0.17
 
+- Merge pull request #32 from steadybit/feat/add-claude-workflows
+- chore(deps): bump github.com/steadybit/action-kit/go/action_kit_sdk
+- chore(deps): bump github.com/steadybit/discovery-kit/go/discovery_kit_sdk
+- chore(deps): bump github.com/steadybit/event-kit/go/event_kit_api
+- chore(deps): bump github.com/steadybit/extension-kit
+- chore: silence SonarQube finding on secrets: inherit in Claude workflows
 - fix: guard the publish attack's jobs channel against being closed twice when stop runs concurrently/twice, which could panic the extension
+- fix: prevent double-close panic on the publish jobs channel (#33)
 
 ## v1.0.16
 
