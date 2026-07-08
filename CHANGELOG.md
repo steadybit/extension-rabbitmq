@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add a "Fail early" option to the node check and the queue backlog check. When enabled, the check fails as soon as a deviating event is observed (node check: a deviating change; queue backlog check: the backlog exceeding the threshold), instead of waiting for the end of the step. The node check defaults to fail-early (matching its previous "All the time" behavior); the queue backlog check defaults to fail-at-end (matching its previous behavior). The node check option only affects the "All the time" mode.
+
 ## v1.0.17
 
 - Merge pull request #32 from steadybit/feat/add-claude-workflows

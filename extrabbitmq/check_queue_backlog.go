@@ -34,6 +34,7 @@ type QueueBacklogCheckState struct {
 
 	StateCheckSuccess bool
 	StateCheckFailed  bool
+	FailEarly         bool
 }
 
 // Interface assertions
@@ -88,6 +89,15 @@ func (a *QueueBacklogCheckAction) Describe() action_kit_api.ActionDescription {
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("10"),
+			},
+			{
+				Name:         "failEarly",
+				Label:        "Fail early",
+				Description:  new("If enabled, the check fails as soon as the backlog exceeds the threshold. If disabled (the default, matching the previous behavior), the check keeps monitoring for the whole duration and only fails at the end of the step."),
+				Type:         action_kit_api.ActionParameterTypeBoolean,
+				DefaultValue: new("false"),
+				Advanced:     new(true),
+				Required:     new(false),
 			},
 		},
 		Widgets: new([]action_kit_api.Widget{
@@ -153,6 +163,8 @@ func (a *QueueBacklogCheckAction) Prepare(_ context.Context, state *QueueBacklog
 
 	state.AcceptableBacklog = extutil.ToInt64(request.Config["acceptableBacklog"])
 	state.StateCheckFailed = false
+	// Defaults to false to preserve the previous behavior (backlog breach reported only at the end).
+	state.FailEarly = extutil.ToBool(request.Config["failEarly"])
 
 	duration := request.Config["duration"].(float64)
 	state.End = time.Now().Add(time.Millisecond * time.Duration(duration))
@@ -197,7 +209,14 @@ func QueueBacklogCheckStatus(ctx context.Context, state *QueueBacklogCheckState)
 	} else {
 		state.StateCheckFailed = true
 	}
-	if completed && state.StateCheckFailed {
+	if state.FailEarly && state.StateCheckFailed {
+		// Fail as soon as the backlog exceeds the threshold.
+		checkError = new(action_kit_api.ActionKitError{
+			Title:  fmt.Sprintf("Queue backlog exceeded threshold %d.", state.AcceptableBacklog),
+			Status: extutil.Ptr(action_kit_api.Failed),
+		})
+		completed = true
+	} else if completed && state.StateCheckFailed {
 		checkError = new(action_kit_api.ActionKitError{
 			Title:  fmt.Sprintf("Queue backlog exceeded threshold %d at least once.", state.AcceptableBacklog),
 			Status: extutil.Ptr(action_kit_api.Failed),
