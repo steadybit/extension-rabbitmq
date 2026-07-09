@@ -51,7 +51,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 			{
 				Name:         "numberOfMessages",
 				Label:        "Number of Messages",
-				Description:  extutil.Ptr("Total number of messages to publish across the entire duration. The publishing rate is this value divided by the duration."),
+				Description:  new("Total number of messages to publish across the entire duration. The publishing rate is this value divided by the duration."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("1"),
@@ -59,7 +59,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 			{
 				Name:         "duration",
 				Label:        "Duration (seconds)",
-				Description:  extutil.Ptr("How long the publisher runs, in seconds. The total number of messages is distributed evenly across this duration."),
+				Description:  new("How long the publisher runs, in seconds. The total number of messages is distributed evenly across this duration."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("30"),
