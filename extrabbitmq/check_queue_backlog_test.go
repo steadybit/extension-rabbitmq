@@ -105,6 +105,7 @@ func TestQueueBacklogCheck_Prepare_SetsState(t *testing.T) {
 	assert.Equal(t, "http://rabbit.local:15672", state.MgmtURL)
 	assert.Equal(t, int64(5), state.AcceptableBacklog)
 	assert.False(t, state.StateCheckFailed)
+	assert.False(t, state.FailEarly) // defaults to false for this check (preserves fail-at-end behavior)
 	assert.WithinDuration(t, time.Now().Add(1500*time.Millisecond), state.End, 2*time.Second)
 }
 

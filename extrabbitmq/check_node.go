@@ -42,6 +42,10 @@ type CheckNodesState struct {
 	End             time.Time
 	ExpectedChanges []string
 	StateCheckMode  string
+	FailEarly       bool
+	// DeviationTitle remembers the first observed deviation in 'All the time' + fail-at-end mode
+	// (FailEarly = false) so it can be reported once the step ends.
+	DeviationTitle string
 
 	NodeNames     []string
 	ManagementURL string
@@ -115,6 +119,15 @@ func (a *CheckNodesAction) Describe() action_kit_api.ActionDescription {
 				}),
 				Required: new(true),
 			},
+			{
+				Name:         "failEarly",
+				Label:        "Fail early",
+				Description:  new("If enabled, the check fails as soon as a deviating change is observed. If disabled, the check keeps collecting events for the whole duration and only fails at the end of the step. Only affects the 'All the time' mode; 'At least once' can only be evaluated at the end of the step."),
+				Type:         action_kit_api.ActionParameterTypeBoolean,
+				DefaultValue: new("true"),
+				Advanced:     new(true),
+				Required:     new(false),
+			},
 		},
 		Widgets: new([]action_kit_api.Widget{
 			action_kit_api.StateOverTimeWidget{
@@ -159,6 +172,11 @@ func (a *CheckNodesAction) Prepare(ctx context.Context, state *CheckNodesState, 
 		state.StateCheckMode = fmt.Sprintf("%v", req.Config["changeCheckMode"])
 	} else {
 		state.StateCheckMode = stateCheckModeAllTheTime
+	}
+	// Default to failing early to preserve the previous behavior for experiments that don't set this parameter.
+	state.FailEarly = true
+	if req.Config["failEarly"] != nil {
+		state.FailEarly = extutil.ToBool(req.Config["failEarly"])
 	}
 	state.ManagementURL = extutil.MustHaveValue(req.Target.Attributes, "rabbitmq.mgmt.url")[0]
 
@@ -246,15 +264,26 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 		changeKeys = append(changeKeys, k)
 	}
 
+	// recordDeviation either fails immediately (fail early) or remembers the first deviation so it can
+	// be reported once the step ends (fail at end). The node-change messages are already phrased in the
+	// past tense, so the same message reads correctly in both cases.
+	recordDeviation := func(title string) {
+		if state.FailEarly {
+			checkErr = new(action_kit_api.ActionKitError{
+				Title:  title,
+				Status: extutil.Ptr(action_kit_api.Failed),
+			})
+		} else if state.DeviationTitle == "" {
+			state.DeviationTitle = title
+		}
+	}
+
 	if len(state.ExpectedChanges) > 0 {
 		switch state.StateCheckMode {
 		case stateCheckModeAllTheTime:
 			for _, c := range changeKeys {
 				if !slices.Contains(state.ExpectedChanges, c) {
-					checkErr = new(action_kit_api.ActionKitError{
-						Title:  fmt.Sprintf("Nodes got an unexpected change '%s' whereas '%v' is expected.", c, state.ExpectedChanges),
-						Status: extutil.Ptr(action_kit_api.Failed),
-					})
+					recordDeviation(fmt.Sprintf("Nodes got an unexpected change '%s' whereas '%v' is expected.", c, state.ExpectedChanges))
 				}
 			}
 			if completed && checkErr == nil && len(changeKeys) == 0 {
@@ -283,11 +312,16 @@ func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (
 			for _, c := range changeKeys {
 				changesSummary.WriteString(fmt.Sprintf(" %s", c))
 			}
-			checkErr = new(action_kit_api.ActionKitError{
-				Title:  fmt.Sprintf("We were expecting no events but got these %s.", changesSummary.String()),
-				Status: extutil.Ptr(action_kit_api.Failed),
-			})
+			recordDeviation(fmt.Sprintf("We were expecting no events but got these %s.", changesSummary.String()))
 		}
+	}
+
+	// In fail-at-end mode, report the first remembered deviation once the step has elapsed.
+	if !state.FailEarly && completed && checkErr == nil && state.DeviationTitle != "" {
+		checkErr = new(action_kit_api.ActionKitError{
+			Title:  state.DeviationTitle,
+			Status: extutil.Ptr(action_kit_api.Failed),
+		})
 	}
 
 	metrics := []action_kit_api.Metric{
