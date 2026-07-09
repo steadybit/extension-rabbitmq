@@ -62,7 +62,7 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 			{
 				Name:         "duration",
 				Label:        "Duration (seconds)",
-				Description:  extutil.Ptr("How long the publisher runs at the specified rate, in seconds. Total messages produced = rate x duration."),
+				Description:  new("How long the publisher runs at the specified rate, in seconds. Total messages produced = rate x duration."),
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("30"),
