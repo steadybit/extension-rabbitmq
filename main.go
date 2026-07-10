@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	_ "github.com/KimMachineGun/automemlimit" // Sets GOMEMLIMIT to 90% of cgroup limit.
 	"github.com/rs/zerolog"
@@ -37,8 +36,6 @@ type ExtensionListResponse struct {
 	event_kit_api.EventListenerList `json:",inline"`
 	advice_kit_api.AdviceList       `json:",inline"`
 }
-
-var startedAt = time.Now().Format(time.RFC3339)
 
 func main() {
 	extlogging.InitZeroLog()
@@ -83,7 +80,7 @@ func registerHandlers(ctx context.Context) {
 	action_kit_sdk.RegisterAction(extrabbitmq.NewCheckNodesAction())
 
 	// Root index
-	exthttp.RegisterHttpHandler("/", exthttp.IfNoneMatchHandler(func() string { return startedAt }, exthttp.GetterAsHandler(getExtensionList)))
+	exthttp.RegisterRevisionedHandler("/", getExtensionList)
 }
 
 func getExtensionList() ExtensionListResponse {
