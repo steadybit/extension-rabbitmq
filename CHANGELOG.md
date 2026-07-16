@@ -1,8 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.0.18
 
 - Add a "Fail early" option to the node check and the queue backlog check. When enabled, the check fails as soon as a deviating event is observed (node check: a deviating change; queue backlog check: the backlog exceeding the threshold), instead of waiting for the end of the step. The node check defaults to fail-early (matching its previous "All the time" behavior); the queue backlog check defaults to fail-at-end (matching its previous behavior). The node check option only affects the "All the time" mode.
+- chore(deps): bump go to 1.26.5 (#39)
+- ci: skip build on .trivyignore.yml-only changes [skip ci]
+- feat(checks): add fail early option (#38)
+- refactor: register extension index via exthttp.RegisterRevisionedHandler (#40)
 
 ## v1.0.17
 
