@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.19
+
+- chore(deps): bump github.com/rabbitmq/amqp091-go from 1.12.0 to 1.13.0
+
 ## v1.0.18
 
 - Add a "Fail early" option to the node check and the queue backlog check. When enabled, the check fails as soon as a deviating event is observed (node check: a deviating change; queue backlog check: the backlog exceeding the threshold), instead of waiting for the end of the step. The node check defaults to fail-early (matching its previous "All the time" behavior); the queue backlog check defaults to fail-at-end (matching its previous behavior). The node check option only affects the "All the time" mode.
