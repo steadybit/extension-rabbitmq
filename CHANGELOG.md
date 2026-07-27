@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.20
+
+- chore(deps): update dependencies
+
 ## v1.0.19
 
 - chore(deps): bump github.com/rabbitmq/amqp091-go from 1.12.0 to 1.13.0
