@@ -207,11 +207,24 @@ func (a *CheckNodesAction) Prepare(ctx context.Context, state *CheckNodesState, 
 	return nil, nil
 }
 
-func (a *CheckNodesAction) Start(_ context.Context, _ *CheckNodesState) (*action_kit_api.StartResult, error) {
-	return nil, nil
+func (a *CheckNodesAction) Start(ctx context.Context, state *CheckNodesState) (*action_kit_api.StartResult, error) {
+	statusResult, err := checkNodesStatus(ctx, state)
+	if statusResult == nil {
+		return nil, err
+	}
+	return &action_kit_api.StartResult{
+		Artifacts: statusResult.Artifacts,
+		Error:     statusResult.Error,
+		Messages:  statusResult.Messages,
+		Metrics:   statusResult.Metrics,
+	}, err
 }
 
 func (a *CheckNodesAction) Status(ctx context.Context, state *CheckNodesState) (*action_kit_api.StatusResult, error) {
+	return checkNodesStatus(ctx, state)
+}
+
+func checkNodesStatus(ctx context.Context, state *CheckNodesState) (*action_kit_api.StatusResult, error) {
 	now := time.Now()
 	configManagement, err := config.GetEndpointByMgmtURL(state.ManagementURL)
 	if err != nil {
