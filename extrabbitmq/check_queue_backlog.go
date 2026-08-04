@@ -172,8 +172,17 @@ func (a *QueueBacklogCheckAction) Prepare(_ context.Context, state *QueueBacklog
 	return nil, nil
 }
 
-func (a *QueueBacklogCheckAction) Start(_ context.Context, _ *QueueBacklogCheckState) (*action_kit_api.StartResult, error) {
-	return nil, nil
+func (a *QueueBacklogCheckAction) Start(ctx context.Context, state *QueueBacklogCheckState) (*action_kit_api.StartResult, error) {
+	statusResult, err := QueueBacklogCheckStatus(ctx, state)
+	if statusResult == nil {
+		return nil, err
+	}
+	return &action_kit_api.StartResult{
+		Artifacts: statusResult.Artifacts,
+		Error:     statusResult.Error,
+		Messages:  statusResult.Messages,
+		Metrics:   statusResult.Metrics,
+	}, err
 }
 
 func (a *QueueBacklogCheckAction) Status(ctx context.Context, state *QueueBacklogCheckState) (*action_kit_api.StatusResult, error) {
