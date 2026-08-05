@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.21
+
+- feat: support filtering targets out of discovery
+- fix: emit the node check metric immediately on Start (#42)
+- fix: emit the queue backlog metric immediately on Start (#43)
+
 ## v1.0.20
 
 - chore(deps): update dependencies
