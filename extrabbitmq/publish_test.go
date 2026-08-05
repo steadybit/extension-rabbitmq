@@ -102,6 +102,65 @@ func Test_createPublishRequest_defaultsAndHeaders(t *testing.T) {
 	}
 }
 
+func Test_awaitPublishOutcome_ackWithoutReturn_isDelivered(t *testing.T) {
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	confirms <- amqp.Confirmation{Ack: true, DeliveryTag: 1}
+	if got := awaitPublishOutcome(confirms, returns, "ex", "rk", time.Second); got != publishDelivered {
+		t.Fatalf("acked message without return must count as delivered, got %v", got)
+	}
+}
+
+func Test_awaitPublishOutcome_ackWithReturn_isFailed(t *testing.T) {
+	// mandatory=true: the broker acks unroutable messages after sending basic.return,
+	// so an ack preceded by a return must not count as a delivered message.
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	returns <- amqp.Return{ReplyCode: 312, ReplyText: "NO_ROUTE", Exchange: "ex", RoutingKey: "rk"}
+	confirms <- amqp.Confirmation{Ack: true, DeliveryTag: 1}
+	if got := awaitPublishOutcome(confirms, returns, "ex", "rk", time.Second); got != publishFailed {
+		t.Fatalf("unroutable (returned) message must count as failed, got %v", got)
+	}
+}
+
+func Test_awaitPublishOutcome_nack_isFailed(t *testing.T) {
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	confirms <- amqp.Confirmation{Ack: false, DeliveryTag: 1}
+	if got := awaitPublishOutcome(confirms, returns, "ex", "rk", time.Second); got != publishFailed {
+		t.Fatalf("nacked message must count as failed, got %v", got)
+	}
+}
+
+func Test_awaitPublishOutcome_ackWithClosedReturns_isDelivered(t *testing.T) {
+	// The returns channel closes when the connection drops. If the ack already arrived,
+	// the message was delivered — the closed channel must not be mistaken for a return.
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	confirms <- amqp.Confirmation{Ack: true, DeliveryTag: 1}
+	close(returns)
+	if got := awaitPublishOutcome(confirms, returns, "ex", "rk", time.Second); got != publishDelivered {
+		t.Fatalf("acked message with closed returns channel must count as delivered, got %v", got)
+	}
+}
+
+func Test_awaitPublishOutcome_closedConfirms_isUnknown(t *testing.T) {
+	confirms := make(chan amqp.Confirmation)
+	returns := make(chan amqp.Return, 1)
+	close(confirms)
+	if got := awaitPublishOutcome(confirms, returns, "ex", "rk", time.Second); got != publishStateUnknown {
+		t.Fatalf("closed confirms channel must yield unknown state, got %v", got)
+	}
+}
+
+func Test_awaitPublishOutcome_timeout_isUnknown(t *testing.T) {
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	if got := awaitPublishOutcome(confirms, returns, "ex", "rk", 20*time.Millisecond); got != publishStateUnknown {
+		t.Fatalf("missing confirm must yield unknown state, got %v", got)
+	}
+}
+
 func Test_retrieveLatestMetrics_drainsChannel(t *testing.T) {
 	ch := make(chan action_kit_api.Metric, 3)
 	// minimal Metric struct fields used only for identity; avoid nil panics
