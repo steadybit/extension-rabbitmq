@@ -32,19 +32,38 @@ type ExecutionRunData struct {
 	tickerDone            chan struct{}              // closed when the ticker goroutine exits
 }
 
+func logReturn(ret amqp.Return, msg string) {
+	log.Error().
+		Str("exchange", ret.Exchange).
+		Str("routingKey", ret.RoutingKey).
+		Uint16("code", ret.ReplyCode).
+		Str("text", ret.ReplyText).
+		Msg(msg)
+}
+
 func startReturnsLogger(ch *amqp.Channel, buf int) <-chan amqp.Return {
 	r := ch.NotifyReturn(make(chan amqp.Return, buf))
 	go func() {
 		for ret := range r {
-			log.Error().
-				Str("exchange", ret.Exchange).
-				Str("routingKey", ret.RoutingKey).
-				Uint16("code", ret.ReplyCode).
-				Str("text", ret.ReplyText).
-				Msg("message returned (unroutable)")
+			logReturn(ret, "message returned (unroutable)")
 		}
 	}()
 	return r
+}
+
+// armChannel enables publisher confirms on ch (best-effort) and registers the listeners used to
+// judge delivery. When confirms are unavailable there is no sync point to correlate returns with,
+// so returned messages are only logged.
+func armChannel(ch *amqp.Channel, buf int) (confirms <-chan amqp.Confirmation, returns <-chan amqp.Return) {
+	if err := ch.Confirm(false); err != nil {
+		log.Debug().Msg("publisher confirms not available")
+		_ = startReturnsLogger(ch, buf)
+		return nil, nil
+	}
+	confirms = ch.NotifyPublish(make(chan amqp.Confirmation, buf))
+	// consumed by the worker itself to exclude unroutable messages from the success count
+	returns = ch.NotifyReturn(make(chan amqp.Return, buf))
+	return confirms, returns
 }
 
 var (
@@ -205,34 +224,54 @@ func createPublishRequest(state *PublishMessageAttackState) (exchange string, ro
 	}
 }
 
+type publishOutcome int
+
+const (
+	publishDelivered publishOutcome = iota
+	publishFailed
+	// publishStateUnknown means no confirm was received for the message. The confirm stream can
+	// no longer be trusted: a late ack would be attributed to the next message, so the caller
+	// must drop the connection and start over with fresh channels.
+	publishStateUnknown
+)
+
+const publishConfirmTimeout = 5 * time.Second
+
+// redialMinInterval is the minimum delay between two reconnect attempts of a worker.
+const redialMinInterval = time.Second
+
 // awaitPublishOutcome waits for the broker confirm of the message just published and reports
 // whether it was actually delivered. A message published with mandatory=true that cannot be
 // routed is acked by the broker after a basic.return, so an ack alone is not proof of delivery.
 // The broker sends the return before the corresponding ack and amqp091-go dispatches both in
 // frame order, so a returned message is already readable from the returns channel when its
 // confirm arrives. Each worker has at most one message in flight per channel.
-func awaitPublishOutcome(confirms <-chan amqp.Confirmation, returns <-chan amqp.Return, exchange, routingKey string) bool {
+func awaitPublishOutcome(confirms <-chan amqp.Confirmation, returns <-chan amqp.Return, exchange, routingKey string, timeout time.Duration) publishOutcome {
 	select {
-	case c := <-confirms:
+	case c, ok := <-confirms:
+		if !ok {
+			log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("confirms channel closed before publish was confirmed")
+			return publishStateUnknown
+		}
 		if !c.Ack {
 			log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish nack")
-			return false
+			return publishFailed
 		}
 		select {
-		case ret := <-returns:
-			log.Error().
-				Str("exchange", ret.Exchange).
-				Str("routingKey", ret.RoutingKey).
-				Uint16("code", ret.ReplyCode).
-				Str("text", ret.ReplyText).
-				Msg("message returned (unroutable), not counted as success")
-			return false
+		case ret, ok := <-returns:
+			if !ok {
+				// the returns channel closes when the connection drops; the ack for this
+				// message already arrived, so it was delivered
+				return publishDelivered
+			}
+			logReturn(ret, "message returned (unroutable), not counted as success")
+			return publishFailed
 		default:
-			return true
+			return publishDelivered
 		}
-	case <-time.After(5 * time.Second):
-		log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("no publish confirm within 5s")
-		return false
+	case <-time.After(timeout):
+		log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("no publish confirm within timeout")
+		return publishStateUnknown
 	}
 }
 
@@ -245,23 +284,21 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 	}
 
 	// Enable confirms (best-effort). If not supported, continue without.
-	var confirms <-chan amqp.Confirmation
-	var returns <-chan amqp.Return
-	if err = ch.Confirm(false); err == nil {
-		confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
-		// consumed by the worker itself to exclude unroutable messages from the success count
-		returns = ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
-	} else {
-		log.Debug().Msg("publisher confirms not available")
-		// without confirms there is no sync point to correlate returns with, so only log them
-		_ = startReturnsLogger(ch, state.MaxConcurrent*2)
-	}
+	confirms, returns := armChannel(ch, state.MaxConcurrent*2)
 
 	// Prepare static publishing data once
 	exchRequest, routingKeyExchange, pubTemplate := createPublishRequest(state)
 
 	// Helper to (re)dial once on demand
+	var lastRedial time.Time
 	redial := func() error {
+		// Throttle reconnects: a permanently failing publish (e.g. a nonexistent exchange
+		// closing the channel on every attempt) must not flood the broker with a new
+		// TCP/TLS connection per message.
+		if wait := redialMinInterval - time.Since(lastRedial); wait > 0 {
+			time.Sleep(wait)
+		}
+		lastRedial = time.Now()
 		if conn != nil {
 			_ = conn.Close()
 		}
@@ -275,15 +312,7 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 			ch = nil
 			return e
 		}
-		// Re-arm confirms and returns
-		confirms = nil
-		returns = nil
-		if e = ch.Confirm(false); e == nil {
-			confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
-			returns = ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
-		} else {
-			_ = startReturnsLogger(ch, state.MaxConcurrent*2)
-		}
+		confirms, returns = armChannel(ch, state.MaxConcurrent*2)
 		return nil
 	}
 
@@ -329,8 +358,19 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 				executionRunData.requestSuccessCounter.Add(1)
 				continue
 			}
-			if awaitPublishOutcome(confirms, returns, exchRequest, routingKeyExchange) {
+			switch awaitPublishOutcome(confirms, returns, exchRequest, routingKeyExchange, publishConfirmTimeout) {
+			case publishDelivered:
 				executionRunData.requestSuccessCounter.Add(1)
+			case publishStateUnknown:
+				// drop the connection so the next job redials with fresh, in-sync channels
+				if ch != nil {
+					_ = ch.Close()
+				}
+				if conn != nil {
+					_ = conn.Close()
+				}
+				conn, ch = nil, nil
+				confirms, returns = nil, nil
 			}
 		}
 	}
