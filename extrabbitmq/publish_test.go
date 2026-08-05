@@ -102,6 +102,36 @@ func Test_createPublishRequest_defaultsAndHeaders(t *testing.T) {
 	}
 }
 
+func Test_awaitPublishOutcome_ackWithoutReturn_isSuccess(t *testing.T) {
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	confirms <- amqp.Confirmation{Ack: true, DeliveryTag: 1}
+	if !awaitPublishOutcome(confirms, returns, "ex", "rk") {
+		t.Fatal("acked message without return must count as success")
+	}
+}
+
+func Test_awaitPublishOutcome_ackWithReturn_isNotSuccess(t *testing.T) {
+	// mandatory=true: the broker acks unroutable messages after sending basic.return,
+	// so an ack preceded by a return must not count as a delivered message.
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	returns <- amqp.Return{ReplyCode: 312, ReplyText: "NO_ROUTE", Exchange: "ex", RoutingKey: "rk"}
+	confirms <- amqp.Confirmation{Ack: true, DeliveryTag: 1}
+	if awaitPublishOutcome(confirms, returns, "ex", "rk") {
+		t.Fatal("unroutable (returned) message must not count as success")
+	}
+}
+
+func Test_awaitPublishOutcome_nack_isNotSuccess(t *testing.T) {
+	confirms := make(chan amqp.Confirmation, 1)
+	returns := make(chan amqp.Return, 1)
+	confirms <- amqp.Confirmation{Ack: false, DeliveryTag: 1}
+	if awaitPublishOutcome(confirms, returns, "ex", "rk") {
+		t.Fatal("nacked message must not count as success")
+	}
+}
+
 func Test_retrieveLatestMetrics_drainsChannel(t *testing.T) {
 	ch := make(chan action_kit_api.Metric, 3)
 	// minimal Metric struct fields used only for identity; avoid nil panics

@@ -53,7 +53,7 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	action := publishRabbitFixedAmountAction{}
 	state := PublishMessageAttackState{NumberOfMessages: 10}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
-		Config:      map[string]any{"duration": 10000, "numberOfMessages": 10, "maxConcurrent": 1},
+		Config:      map[string]any{"duration": 10000, "numberOfMessages": 10, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
 		ExecutionId: uuid.New(),
 		Target: &action_kit_api.Target{
 			Attributes: map[string][]string{
@@ -66,6 +66,8 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	assert.Nil(t, result)
 	assert.NoError(t, err)
 	assert.Greater(t, state.DelayBetweenRequestsInMS, uint64(0))
+	assert.Equal(t, "my-exchange", state.Exchange)
+	assert.Equal(t, "my-key", state.RoutingKey)
 }
 
 func TestCheckEndedPublishRabbitFixedAmount(t *testing.T) {

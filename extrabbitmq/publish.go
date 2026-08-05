@@ -66,6 +66,7 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMess
 	if state.MaxConcurrent == 0 {
 		return nil, fmt.Errorf("max concurrent can't be zero")
 	}
+	state.Exchange = extutil.ToString(request.Config["exchange"])
 	state.RoutingKey = extutil.ToString(request.Config["routingKey"])
 	state.Body = extutil.ToString(request.Config["body"])
 	state.ExecutionID = request.ExecutionId
@@ -204,6 +205,37 @@ func createPublishRequest(state *PublishMessageAttackState) (exchange string, ro
 	}
 }
 
+// awaitPublishOutcome waits for the broker confirm of the message just published and reports
+// whether it was actually delivered. A message published with mandatory=true that cannot be
+// routed is acked by the broker after a basic.return, so an ack alone is not proof of delivery.
+// The broker sends the return before the corresponding ack and amqp091-go dispatches both in
+// frame order, so a returned message is already readable from the returns channel when its
+// confirm arrives. Each worker has at most one message in flight per channel.
+func awaitPublishOutcome(confirms <-chan amqp.Confirmation, returns <-chan amqp.Return, exchange, routingKey string) bool {
+	select {
+	case c := <-confirms:
+		if !c.Ack {
+			log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("publish nack")
+			return false
+		}
+		select {
+		case ret := <-returns:
+			log.Error().
+				Str("exchange", ret.Exchange).
+				Str("routingKey", ret.RoutingKey).
+				Uint16("code", ret.ReplyCode).
+				Str("text", ret.ReplyText).
+				Msg("message returned (unroutable), not counted as success")
+			return false
+		default:
+			return true
+		}
+	case <-time.After(5 * time.Second):
+		log.Error().Str("exchange", exchange).Str("routingKey", routingKey).Msg("no publish confirm within 5s")
+		return false
+	}
+}
+
 func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMessageAttackState, checkEnded func(*ExecutionRunData, *PublishMessageAttackState) bool) {
 	// Dial once per worker, reuse channel
 	conn, ch, err := clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
@@ -214,14 +246,16 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 
 	// Enable confirms (best-effort). If not supported, continue without.
 	var confirms <-chan amqp.Confirmation
+	var returns <-chan amqp.Return
 	if err = ch.Confirm(false); err == nil {
 		confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
+		// consumed by the worker itself to exclude unroutable messages from the success count
+		returns = ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
 	} else {
 		log.Debug().Msg("publisher confirms not available")
+		// without confirms there is no sync point to correlate returns with, so only log them
+		_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 	}
-
-	// Always listen for returns to detect unroutable messages
-	_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 
 	// Prepare static publishing data once
 	exchRequest, routingKeyExchange, pubTemplate := createPublishRequest(state)
@@ -243,10 +277,13 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 		}
 		// Re-arm confirms and returns
 		confirms = nil
+		returns = nil
 		if e = ch.Confirm(false); e == nil {
 			confirms = ch.NotifyPublish(make(chan amqp.Confirmation, state.MaxConcurrent*2))
+			returns = ch.NotifyReturn(make(chan amqp.Return, state.MaxConcurrent*2))
+		} else {
+			_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 		}
-		_ = startReturnsLogger(ch, state.MaxConcurrent*2)
 		return nil
 	}
 
@@ -292,15 +329,8 @@ func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMe
 				executionRunData.requestSuccessCounter.Add(1)
 				continue
 			}
-			select {
-			case c := <-confirms:
-				if c.Ack {
-					executionRunData.requestSuccessCounter.Add(1)
-				} else {
-					log.Error().Str("exchange", exchRequest).Str("routingKey", routingKeyExchange).Msg("publish nack")
-				}
-			case <-time.After(5 * time.Second):
-				log.Error().Str("exchange", exchRequest).Str("routingKey", routingKeyExchange).Msg("no publish confirm within 5s")
+			if awaitPublishOutcome(confirms, returns, exchRequest, routingKeyExchange) {
+				executionRunData.requestSuccessCounter.Add(1)
 			}
 		}
 	}
