@@ -371,6 +371,46 @@ func Test_stop_completesWhenNoWorkersAlive(t *testing.T) {
 	}
 }
 
+func Test_stop_waitsForInFlightConfirmBeforeVerdict(t *testing.T) {
+	// Regression test: the platform stops a publish attack while the last message's broker
+	// confirm is still in flight. stop() must wait for the workers before computing the
+	// success rate, otherwise a fully successful run reports e.g. 119/120 (99.17%).
+	id := uuid.New()
+	state := &PublishMessageAttackState{
+		ExecutionID:              id,
+		DelayBetweenRequestsInMS: 50,
+		MaxConcurrent:            1,
+		SuccessRate:              100, // anything below 100% must fail the run
+	}
+
+	erd := &ExecutionRunData{
+		stopTicker: make(chan bool),
+		jobs:       make(chan time.Time, 1),
+		metrics:    make(chan action_kit_api.Metric, 1),
+	}
+	// Simulate: 2 messages published, only 1 success counted yet — the second confirm is
+	// still being awaited by a worker when stop() is called.
+	erd.requestCounter.Store(2)
+	erd.requestSuccessCounter.Store(1)
+	erd.workers.Add(1)
+	go func() {
+		defer erd.workers.Done()
+		// the "worker" finishes counting its in-flight confirm shortly after stop begins
+		time.Sleep(150 * time.Millisecond)
+		erd.requestSuccessCounter.Add(1)
+	}()
+	ExecutionRunDataMap.Store(id, erd)
+
+	start(state)
+	result, err := stop(state)
+	if err != nil {
+		t.Fatalf("stop returned error: %v", err)
+	}
+	if result != nil && result.Error != nil {
+		t.Fatalf("run must be successful once the in-flight confirm is counted, got: %v", result.Error.Title)
+	}
+}
+
 func Test_stop_calledTwiceDoesNotPanic(t *testing.T) {
 	// Calling stop() twice should be safe — the second call should return nil
 	// because the execution data was already deleted.
