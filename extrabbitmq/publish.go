@@ -538,7 +538,9 @@ func stop(state *PublishMessageAttackState) (*action_kit_api.StopResult, error) 
 	// Wait (bounded) for the publisher workers to finish their in-flight message before
 	// computing the success rate: the last message's broker confirm otherwise races the
 	// verdict, and a fully successful run can report e.g. 119/120. The bound covers the
-	// worst case of one publish retry (redial throttle) plus one confirm timeout.
+	// common case (one redial throttle plus one confirm timeout); a fully degraded worker
+	// can exceed it (two 5s publish context timeouts on a dead connection), in which case
+	// the warning path below applies and the rate is computed as before this fix.
 	workersDone := make(chan struct{})
 	go func() {
 		executionRunData.workers.Wait()
