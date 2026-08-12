@@ -42,6 +42,7 @@ func TestWithMinikube(t *testing.T) {
 			{Name: "discover vhosts", Test: testDiscoverVhosts},
 			{Name: "discover queues", Test: testDiscoverQueues},
 			{Name: "discover nodes", Test: testDiscoverNodes},
+			{Name: "discover exchanges", Test: testDiscoverExchanges},
 		},
 	)
 }
@@ -94,6 +95,20 @@ func testDiscoverNodes(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
 	assert.NotEmpty(t, target.Attributes["rabbitmq.node.running"])
 }
 
+func testDiscoverExchanges(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	target, err := e2e.PollForTarget(ctx, e, "com.steadybit.extension_rabbitmq.exchange", func(t discovery_kit_api.Target) bool {
+		return len(t.Attributes["rabbitmq.exchange.name"]) > 0 && t.Attributes["rabbitmq.exchange.name"][0] == "e2e.topic"
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "com.steadybit.extension_rabbitmq.exchange", target.TargetType)
+	assert.Equal(t, []string{"order"}, target.Attributes["rabbitmq.exchange.vhost"])
+	assert.Equal(t, []string{"topic"}, target.Attributes["rabbitmq.exchange.type"])
+	assert.NotEmpty(t, target.Attributes["rabbitmq.amqp.url"])
+}
+
 func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 	if out, err := exec.Command("helm", "repo", "add", "bitnami", "https://charts.bitnami.com/bitnami").CombinedOutput(); err != nil { //NOSONAR go:S4036
 		return fmt.Errorf("failed to add repo: %s: %s", err, out)
@@ -140,7 +155,8 @@ set -o pipefail
 curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/vhosts/%s >/dev/null
 curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/permissions/%s/%s -d '{"configure":".*","write":".*","read":".*"}' >/dev/null
 curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/queues/%s/%s -d '{"durable":true}' >/dev/null
-`, user, pass, vhost, user, pass, vhost, user, user, pass, vhost, queue),
+curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/exchanges/%s/e2e.topic -d '{"type":"topic","durable":true}' >/dev/null
+`, user, pass, vhost, user, pass, vhost, user, user, pass, vhost, queue, user, pass, vhost),
 		)
 		out, err := cmd.CombinedOutput()
 		if err == nil {

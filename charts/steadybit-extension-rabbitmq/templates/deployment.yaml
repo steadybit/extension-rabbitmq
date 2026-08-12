@@ -68,6 +68,10 @@ spec:
             - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES
               value: {{ join "," .Values.discovery.attributes.excludes.queue | quote }}
             {{- end }}
+            {{- if .Values.discovery.attributes.excludes.exchange }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_EXCHANGES
+              value: {{ join "," .Values.discovery.attributes.excludes.exchange | quote }}
+            {{- end }}
             {{- if .Values.discovery.interval.node }}
             - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS
               value: {{ .Values.discovery.interval.node | quote }}
@@ -79,6 +83,10 @@ spec:
             {{- if .Values.discovery.interval.queue }}
             - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
               value: {{ .Values.discovery.interval.queue | quote }}
+            {{- end }}
+            {{- if .Values.discovery.interval.exchange }}
+            - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+              value: {{ .Values.discovery.interval.exchange | quote }}
             {{- end }}
             {{- /* RabbitMQ management endpoints JSON from Secret or values */}}
             - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON

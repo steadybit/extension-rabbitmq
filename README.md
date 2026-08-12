@@ -14,6 +14,7 @@ rights on rabbitmq side :
 - Get Queue Metrics
 - List Vhosts
 - List Nodes
+- List Exchanges
 - Publish Messages
 - Create / Delete Policies
 
@@ -26,8 +27,10 @@ rights on rabbitmq side :
 | `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS`     | `discovery.interval.vhost`            | Interval (in seconds) for discovering RabbitMQ cluster nodes.                                                                                                                                         | no       | `30`    |
 | `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_NODE_SECONDS`      | `discovery.interval.node`             | Interval (in seconds) for discovering RabbitMQ vhosts.                                                                                                                                                | no       | `30`    |
 | `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS`     | `discovery.interval.queue`            | Interval (in seconds) for discovering RabbitMQ queues.                                                                                                                                                | no       | `120`   |
+| `STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS`  | `discovery.interval.exchange`         | Interval (in seconds) for discovering RabbitMQ exchanges. The unnamed default exchange, `amq.*` built-ins and internal exchanges are never reported.                                                  | no       | `120`   |
 | `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_VHOSTS` | `discovery.attributes.excludes.vhost` | List of Vhost attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
 | `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES` | `discovery.attributes.excludes.queue` | List of Queue attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
+| `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_EXCHANGES` | `discovery.attributes.excludes.exchange` | List of Exchange attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                 | no       |         |
 
 Beyond the settings above, this extension supports the configuration common to all Steadybit
 extensions:
