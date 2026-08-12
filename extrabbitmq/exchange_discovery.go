@@ -17,6 +17,7 @@ import (
 	"github.com/steadybit/extension-kit/extutil"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
+	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
 )
 
@@ -92,7 +93,13 @@ func getAllExchanges(_ context.Context) ([]discovery_kit_api.Target, error) {
 			clusterName = cn.Name
 		}
 
-		exchanges, err := client.ListExchanges()
+		ep, err := config.GetEndpointByMgmtURL(client.Endpoint)
+		if err != nil {
+			return nil, err
+		}
+		// paged and column-filtered so brokers with thousands of exchanges are fetched in
+		// bounded chunks instead of one giant response
+		exchanges, err := clients.ListAllExchanges(ep)
 		if err != nil {
 			return nil, err
 		}

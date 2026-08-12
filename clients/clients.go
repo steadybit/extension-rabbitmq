@@ -3,6 +3,7 @@ package clients
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -104,6 +105,81 @@ func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Cli
 		backoff:    500 * time.Millisecond,
 	}
 	return rabbithole.NewTLSClient(u.String(), config.Username, config.Password, rt)
+}
+
+// pagedExchanges mirrors the management API's paged envelope for /api/exchanges.
+type pagedExchanges struct {
+	Items      []rabbithole.ExchangeInfo `json:"items"`
+	Page       int                       `json:"page"`
+	PageCount  int                       `json:"page_count"`
+	TotalCount int                       `json:"total_count"`
+}
+
+// exchangeColumns limits the response to the attributes the discovery reports. Without it the
+// management API includes per-exchange rate statistics, which multiplies the payload on
+// brokers with thousands of exchanges.
+const exchangeColumns = "name,vhost,type,durable,auto_delete,internal"
+
+// ListAllExchanges lists the exchanges of a management endpoint page by page with a columns
+// filter. rabbit-hole only offers an unpaged ListExchanges without column selection, which
+// does not scale to brokers with thousands of exchanges.
+func ListAllExchanges(cfg *config.ManagementEndpoint) ([]rabbithole.ExchangeInfo, error) {
+	client, err := CreateMgmtClientFromURL(cfg)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := &http.Client{Transport: newTransportForEndpoint(cfg), Timeout: 60 * time.Second}
+
+	all := make([]rabbithole.ExchangeInfo, 0, 256)
+	page := 1
+	pageSize := 500
+	for {
+		u := fmt.Sprintf("%s/api/exchanges?page=%d&page_size=%d&columns=%s", strings.TrimSuffix(client.Endpoint, "/"), page, pageSize, url.QueryEscape(exchangeColumns))
+		req, err := http.NewRequest(http.MethodGet, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.SetBasicAuth(client.Username, client.Password)
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var paged pagedExchanges
+		decodeErr := json.NewDecoder(resp.Body).Decode(&paged)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("listing exchanges failed: %s returned status %d", client.Endpoint, resp.StatusCode)
+		}
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+
+		all = append(all, paged.Items...)
+		if len(paged.Items) == 0 || len(all) >= paged.TotalCount || page >= paged.PageCount {
+			return all, nil
+		}
+		page++
+	}
+}
+
+// newTransportForEndpoint builds the same retrying (and TLS-configured) transport that
+// CreateMgmtClientFromURL installs on its rabbit-hole client.
+func newTransportForEndpoint(cfg *config.ManagementEndpoint) http.RoundTripper {
+	base := http.DefaultTransport
+	if u, err := url.Parse(cfg.URL); err == nil && u.Scheme == "https" {
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: cfg.InsecureSkipVerify}
+		if cfg.CAFile != "" {
+			if pem, err := os.ReadFile(cfg.CAFile); err == nil {
+				pool := x509.NewCertPool()
+				if pool.AppendCertsFromPEM(pem) {
+					tlsCfg.RootCAs = pool
+				}
+			}
+		}
+		base = &http.Transport{TLSClientConfig: tlsCfg}
+	}
+	return &retryTransport{base: base, maxRetries: 2, backoff: 500 * time.Millisecond}
 }
 
 func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {

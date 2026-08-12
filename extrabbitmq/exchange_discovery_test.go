@@ -22,7 +22,19 @@ func mockExchangeMgmtServer(t *testing.T, exchanges []rabbithole.ExchangeInfo, c
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/exchanges", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(exchanges)
+		// the discovery fetches with pagination and a columns filter
+		type pagedExchangesResponse struct {
+			Items      []rabbithole.ExchangeInfo `json:"items"`
+			Page       int                       `json:"page"`
+			PageCount  int                       `json:"page_count"`
+			TotalCount int                       `json:"total_count"`
+		}
+		_ = json.NewEncoder(w).Encode(pagedExchangesResponse{
+			Items:      exchanges,
+			Page:       1,
+			PageCount:  1,
+			TotalCount: len(exchanges),
+		})
 	})
 	// rabbit-hole requests "cluster-name/" with a trailing slash — the pattern must match both
 	mux.HandleFunc("/api/cluster-name/", func(w http.ResponseWriter, r *http.Request) {
