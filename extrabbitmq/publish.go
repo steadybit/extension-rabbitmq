@@ -30,6 +30,7 @@ type ExecutionRunData struct {
 	stopOnce              sync.Once                  // ensures ticker stop/close happens once
 	jobsCloseOnce         sync.Once                  // ensures the jobs channel is closed only once
 	tickerDone            chan struct{}              // closed when the ticker goroutine exits
+	workers               sync.WaitGroup             // tracks publisher workers so stop can wait for in-flight confirms
 }
 
 func logReturn(ret amqp.Return, msg string) {
@@ -221,6 +222,7 @@ func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *Publi
 
 	// create worker pool
 	for w := 1; w <= state.MaxConcurrent; w++ {
+		executionRunData.workers.Add(1)
 		go requestPublisherWorker(executionRunData, state, checkEnded)
 	}
 	return nil, nil
@@ -353,6 +355,7 @@ func awaitPublishOutcome(confirms <-chan amqp.Confirmation, returns <-chan amqp.
 }
 
 func requestPublisherWorker(executionRunData *ExecutionRunData, state *PublishMessageAttackState, checkEnded func(*ExecutionRunData, *PublishMessageAttackState) bool) {
+	defer executionRunData.workers.Done()
 	// Dial once per worker, reuse channel
 	conn, ch, err := clients.CreateNewAMQPConnection(state.AmqpURL, state.AmqpUser, state.AmqpPassword, state.AmqpInsecureSkipVerify, state.AmqpCA)
 	if err != nil {
@@ -531,6 +534,21 @@ func stop(state *PublishMessageAttackState) (*action_kit_api.StopResult, error) 
 	executionRunData.jobsCloseOnce.Do(func() {
 		close(executionRunData.jobs)
 	})
+
+	// Wait (bounded) for the publisher workers to finish their in-flight message before
+	// computing the success rate: the last message's broker confirm otherwise races the
+	// verdict, and a fully successful run can report e.g. 119/120. The bound covers the
+	// worst case of one publish retry (redial throttle) plus one confirm timeout.
+	workersDone := make(chan struct{})
+	go func() {
+		executionRunData.workers.Wait()
+		close(workersDone)
+	}()
+	select {
+	case <-workersDone:
+	case <-time.After(publishConfirmTimeout + redialMinInterval + 2*time.Second):
+		log.Warn().Msg("publish workers did not finish within the stop timeout, computing the success rate with in-flight messages uncounted")
+	}
 
 	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
 	// calculate the success rate
