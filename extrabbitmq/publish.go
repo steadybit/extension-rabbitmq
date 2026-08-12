@@ -122,7 +122,7 @@ func guardExchangeTargetCount(request action_kit_api.PrepareActionRequestBody, e
 	entry.targets[request.ExecutionId] = struct{}{}
 	entry.lastSeen = now
 	if len(entry.targets) > maxQueueTargetsWithExchange {
-		return fmt.Errorf("the exchange parameter is set and this execution prepared more than %d queue targets publishing to the same exchange: every targeted queue would publish the same messages, multiplying the load on the broker — restrict the target selection to at most %d queues when publishing via an exchange, or use an exchange target instead", maxQueueTargetsWithExchange, maxQueueTargetsWithExchange)
+		return fmt.Errorf("the exchange parameter is set and more than %d queue targets were prepared: restrict the target selection to at most %d queues, or use the Publish to Exchange action instead", maxQueueTargetsWithExchange, maxQueueTargetsWithExchange)
 	}
 	return nil
 }
