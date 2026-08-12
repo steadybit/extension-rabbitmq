@@ -70,12 +70,14 @@ func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Cli
 			config.Password = pw
 		}
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
+	}
+	rt, err := newMgmtTransport(config)
+	if err != nil {
+		return nil, err
+	}
 	if u.Scheme == "http" {
-		rt := &retryTransport{
-			base:       http.DefaultTransport,
-			maxRetries: 2,
-			backoff:    500 * time.Millisecond,
-		}
 		client, err := rabbithole.NewClient(u.String(), config.Username, config.Password)
 		if err != nil {
 			return nil, err
@@ -83,28 +85,33 @@ func CreateMgmtClientFromURL(config *config.ManagementEndpoint) (*rabbithole.Cli
 		client.SetTransport(rt)
 		return client, nil
 	}
-	if u.Scheme != "https" {
-		return nil, fmt.Errorf("unsupported scheme: %s", u.Scheme)
-	}
-	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: config.InsecureSkipVerify}
-	if config.CAFile != "" {
-		pem, err := os.ReadFile(config.CAFile)
-		if err != nil {
-			return nil, err
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("invalid CA: %s", config.CAFile)
-		}
-		tlsCfg.RootCAs = pool
-	}
-	baseTr := &http.Transport{TLSClientConfig: tlsCfg}
-	rt := &retryTransport{
-		base:       baseTr,
-		maxRetries: 2,
-		backoff:    500 * time.Millisecond,
-	}
 	return rabbithole.NewTLSClient(u.String(), config.Username, config.Password, rt)
+}
+
+// newMgmtTransport builds the retrying (and, for https, TLS-configured) transport used for all
+// management API calls of an endpoint.
+func newMgmtTransport(cfg *config.ManagementEndpoint) (http.RoundTripper, error) {
+	u, err := url.Parse(cfg.URL)
+	if err != nil {
+		return nil, err
+	}
+	base := http.RoundTripper(http.DefaultTransport)
+	if u.Scheme == "https" {
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: cfg.InsecureSkipVerify}
+		if cfg.CAFile != "" {
+			pem, err := os.ReadFile(cfg.CAFile)
+			if err != nil {
+				return nil, err
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, fmt.Errorf("invalid CA: %s", cfg.CAFile)
+			}
+			tlsCfg.RootCAs = pool
+		}
+		base = &http.Transport{TLSClientConfig: tlsCfg}
+	}
+	return &retryTransport{base: base, maxRetries: 2, backoff: 500 * time.Millisecond}, nil
 }
 
 // pagedExchanges mirrors the management API's paged envelope for /api/exchanges.
@@ -128,7 +135,11 @@ func ListAllExchanges(cfg *config.ManagementEndpoint) ([]rabbithole.ExchangeInfo
 	if err != nil {
 		return nil, err
 	}
-	httpClient := &http.Client{Transport: newTransportForEndpoint(cfg), Timeout: 60 * time.Second}
+	rt, err := newMgmtTransport(cfg)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := &http.Client{Transport: rt, Timeout: 60 * time.Second}
 
 	all := make([]rabbithole.ExchangeInfo, 0, 256)
 	page := 1
@@ -161,25 +172,6 @@ func ListAllExchanges(cfg *config.ManagementEndpoint) ([]rabbithole.ExchangeInfo
 		}
 		page++
 	}
-}
-
-// newTransportForEndpoint builds the same retrying (and TLS-configured) transport that
-// CreateMgmtClientFromURL installs on its rabbit-hole client.
-func newTransportForEndpoint(cfg *config.ManagementEndpoint) http.RoundTripper {
-	base := http.DefaultTransport
-	if u, err := url.Parse(cfg.URL); err == nil && u.Scheme == "https" {
-		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: cfg.InsecureSkipVerify}
-		if cfg.CAFile != "" {
-			if pem, err := os.ReadFile(cfg.CAFile); err == nil {
-				pool := x509.NewCertPool()
-				if pool.AppendCertsFromPEM(pem) {
-					tlsCfg.RootCAs = pool
-				}
-			}
-		}
-		base = &http.Transport{TLSClientConfig: tlsCfg}
-	}
-	return &retryTransport{base: base, maxRetries: 2, backoff: 500 * time.Millisecond}
 }
 
 func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, ca string) (*amqp.Connection, *amqp.Channel, error) {
