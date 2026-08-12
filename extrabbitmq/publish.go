@@ -70,52 +70,59 @@ var (
 	ExecutionRunDataMap = sync.Map{} //make(map[uuid.UUID]*ExecutionRunData)
 )
 
-// maxQueueTargetsWithExchange is the maximum number of queue targets a single experiment
-// execution may prepare when the exchange parameter is set.
+// maxQueueTargetsWithExchange is the maximum number of queue targets a single publish step
+// may prepare when the exchange parameter is set.
 const maxQueueTargetsWithExchange = 10
 
 var exchangeGuard = struct {
 	sync.Mutex
-	counts map[string]*exchangeGuardEntry
-}{counts: map[string]*exchangeGuardEntry{}}
+	entries map[string]*exchangeGuardEntry
+}{entries: map[string]*exchangeGuardEntry{}}
 
 type exchangeGuardEntry struct {
-	count    int
+	targets  map[uuid.UUID]struct{}
 	lastSeen time.Time
 }
 
 // guardExchangeTargetCount fails the preparation once more than maxQueueTargetsWithExchange
-// targets of the same experiment execution prepare a queue publish with the exchange parameter
-// set. With an exchange set, every targeted queue starts an identical publisher against that
-// same exchange, multiplying the load by the number of targets while the targeted queue itself
-// contributes nothing but its vhost. The platform does not tell the extension how many targets
-// an execution has, so preparations are counted per experiment execution; the run fails as soon
-// as one target too many prepares, which aborts the whole execution.
-func guardExchangeTargetCount(request action_kit_api.PrepareActionRequestBody) error {
+// targets prepare a queue publish with the same exchange parameter within one experiment
+// execution. With an exchange set, every targeted queue starts an identical publisher against
+// that same exchange, multiplying the load by the number of targets while the targeted queue
+// itself contributes nothing but its vhost.
+//
+// The platform does not tell the extension how many targets an execution has, so distinct
+// target preparations are counted per (experiment execution, exchange, routing key):
+//   - steps publishing to different exchanges or routing keys count separately, so an
+//     execution with several distinct publish steps is not falsely aborted;
+//   - targets are identified by their action execution ID, so a platform-side retry of the
+//     same target's prepare does not consume additional budget;
+//   - the guard is per extension process — with multiple replicas the preparations of one
+//     execution may split across processes and the limit may not be reached.
+func guardExchangeTargetCount(request action_kit_api.PrepareActionRequestBody, exchange, routingKey string) error {
 	ec := request.ExecutionContext
 	if ec == nil || ec.ExperimentKey == nil || ec.ExecutionId == nil {
-		// without an execution context the preparations of one execution cannot be correlated
+		log.Warn().Msg("cannot enforce the exchange target-count guard: the prepare request has no execution context")
 		return nil
 	}
-	key := fmt.Sprintf("%s/%d", *ec.ExperimentKey, *ec.ExecutionId)
+	key := fmt.Sprintf("%s/%d/%s/%s", *ec.ExperimentKey, *ec.ExecutionId, exchange, routingKey)
 	now := time.Now()
 
 	exchangeGuard.Lock()
 	defer exchangeGuard.Unlock()
-	for k, e := range exchangeGuard.counts {
+	for k, e := range exchangeGuard.entries {
 		if now.Sub(e.lastSeen) > time.Hour {
-			delete(exchangeGuard.counts, k)
+			delete(exchangeGuard.entries, k)
 		}
 	}
-	entry := exchangeGuard.counts[key]
+	entry := exchangeGuard.entries[key]
 	if entry == nil {
-		entry = &exchangeGuardEntry{}
-		exchangeGuard.counts[key] = entry
+		entry = &exchangeGuardEntry{targets: map[uuid.UUID]struct{}{}}
+		exchangeGuard.entries[key] = entry
 	}
-	entry.count++
+	entry.targets[request.ExecutionId] = struct{}{}
 	entry.lastSeen = now
-	if entry.count > maxQueueTargetsWithExchange {
-		return fmt.Errorf("the exchange parameter is set and this execution prepared more than %d queue targets: every targeted queue would publish the same messages to the same exchange, multiplying the load on the broker — restrict the target selection to at most %d queues when publishing via an exchange, or use an exchange target instead", maxQueueTargetsWithExchange, maxQueueTargetsWithExchange)
+	if len(entry.targets) > maxQueueTargetsWithExchange {
+		return fmt.Errorf("the exchange parameter is set and this execution prepared more than %d queue targets publishing to the same exchange: every targeted queue would publish the same messages, multiplying the load on the broker — restrict the target selection to at most %d queues when publishing via an exchange, or use an exchange target instead", maxQueueTargetsWithExchange, maxQueueTargetsWithExchange)
 	}
 	return nil
 }
@@ -127,7 +134,7 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMess
 	state.Queue = extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.queue.name")[0]
 	state.Exchange = extutil.ToString(request.Config["exchange"])
 	if state.Exchange != "" {
-		if err := guardExchangeTargetCount(request); err != nil {
+		if err := guardExchangeTargetCount(request, state.Exchange, extutil.ToString(request.Config["routingKey"])); err != nil {
 			return nil, err
 		}
 	}
@@ -147,8 +154,9 @@ func prepareExchange(request action_kit_api.PrepareActionRequestBody, state *Pub
 
 func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, vhostAttribute string, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
 	var err error
-	duration := extutil.ToInt64(request.Config["duration"])
-	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(duration))
+	// the publish actions declare "duration" as an integer number of seconds
+	durationMs := extutil.ToInt64(request.Config["duration"]) * 1000
+	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(durationMs))
 	state.SuccessRate = extutil.ToInt(request.Config["successRate"])
 	state.MaxConcurrent = extutil.ToInt(request.Config["maxConcurrent"])
 
@@ -195,8 +203,8 @@ func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *Publi
 	// Ensure a positive tick interval. If not given, derive from duration/numberOfMessages or default.
 	if state.DelayBetweenRequestsInMS <= 0 {
 		per := int64(0)
-		if duration > 0 && state.NumberOfMessages > 0 {
-			per = duration / int64(state.NumberOfMessages)
+		if durationMs > 0 && state.NumberOfMessages > 0 {
+			per = durationMs / int64(state.NumberOfMessages)
 		}
 		if per <= 0 {
 			per = 100 // 100ms sensible default

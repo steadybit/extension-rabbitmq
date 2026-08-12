@@ -3,6 +3,7 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"net/url"
 	"strconv"
 	"time"
@@ -88,7 +89,9 @@ func getAllQueues(ctx context.Context) ([]discovery_kit_api.Target, error) {
 		// Resolve values that are constant per client once, not per queue.
 		amqpURL := resolveAMQPURLForClient(client.Endpoint)
 		clusterName := ""
-		if cn, _ := client.GetClusterName(); cn != nil {
+		if cn, err := client.GetClusterName(); err != nil {
+			log.Warn().Err(err).Str("endpoint", client.Endpoint).Msg("failed to resolve cluster name, rabbitmq.cluster.name will be empty on queue targets")
+		} else if cn != nil {
 			clusterName = cn.Name
 		}
 

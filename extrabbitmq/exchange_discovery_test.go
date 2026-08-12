@@ -71,9 +71,9 @@ func Test_Exchange_DescribeAttributes_AllPresent(t *testing.T) {
 
 func Test_Exchange_Discovery_FiltersBuiltinsAndInternal(t *testing.T) {
 	exchanges := []rabbithole.ExchangeInfo{
-		{Vhost: "/", Name: "", Type: "direct", Durable: true},                       // default exchange
-		{Vhost: "/", Name: "amq.topic", Type: "topic", Durable: true},               // built-in
-		{Vhost: "/", Name: "amq.fanout", Type: "fanout", Durable: true},             // built-in
+		{Vhost: "/", Name: "", Type: "direct", Durable: true},           // default exchange
+		{Vhost: "/", Name: "amq.topic", Type: "topic", Durable: true},   // built-in
+		{Vhost: "/", Name: "amq.fanout", Type: "fanout", Durable: true}, // built-in
 		{Vhost: "/", Name: "internal.ex", Type: "topic", Durable: true, Internal: true},
 		{Vhost: "/", Name: "demo.topic", Type: "topic", Durable: true},
 		{Vhost: "orders", Name: "order.events", Type: "fanout", Durable: true, AutoDelete: true},

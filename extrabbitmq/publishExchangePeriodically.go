@@ -4,14 +4,15 @@ package extrabbitmq
 
 import (
 	"context"
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
 	"github.com/steadybit/extension-kit/extutil"
 )
 
-type publishExchangePeriodicallyAction struct{}
+type publishExchangePeriodicallyAction struct {
+	periodicPublishBehavior
+}
 
 // ensure interfaces
 var (
@@ -22,10 +23,6 @@ var (
 
 func NewPublishExchangePeriodically() action_kit_sdk.Action[PublishMessageAttackState] {
 	return &publishExchangePeriodicallyAction{}
-}
-
-func (a *publishExchangePeriodicallyAction) NewEmptyState() PublishMessageAttackState {
-	return PublishMessageAttackState{}
 }
 
 func (a *publishExchangePeriodicallyAction) Describe() action_kit_api.ActionDescription {
@@ -50,7 +47,7 @@ func (a *publishExchangePeriodicallyAction) Describe() action_kit_api.ActionDesc
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlExternal,
 		Parameters: []action_kit_api.ActionParameter{
-			routingKey,
+			routingKeyExchange,
 			headers,
 			body,
 			{
@@ -84,26 +81,4 @@ func (a *publishExchangePeriodicallyAction) Describe() action_kit_api.ActionDesc
 func (a *publishExchangePeriodicallyAction) Prepare(ctx context.Context, state *PublishMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
 	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsPeriodically(extutil.ToInt64(request.Config["messagesPerSecond"]))
 	return prepareExchange(request, state, func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool { return false })
-}
-
-func (a *publishExchangePeriodicallyAction) Start(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StartResult, error) {
-	start(state)
-	return nil, nil
-}
-
-func (a *publishExchangePeriodicallyAction) Status(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StatusResult, error) {
-	executionRunData, err := loadExecutionRunData(state.ExecutionID)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load execution run data")
-		return nil, err
-	}
-	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
-	return &action_kit_api.StatusResult{
-		Completed: false,
-		Metrics:   extutil.Ptr(latestMetrics),
-	}, nil
-}
-
-func (a *publishExchangePeriodicallyAction) Stop(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StopResult, error) {
-	return stop(state)
 }

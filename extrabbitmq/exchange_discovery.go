@@ -6,6 +6,7 @@ package extrabbitmq
 import (
 	"context"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"strings"
 	"time"
 
@@ -85,7 +86,9 @@ func getAllExchanges(_ context.Context) ([]discovery_kit_api.Target, error) {
 	handler := func(client *rabbithole.Client, targetType string) ([]discovery_kit_api.Target, error) {
 		amqpURL := resolveAMQPURLForClient(client.Endpoint)
 		clusterName := ""
-		if cn, _ := client.GetClusterName(); cn != nil {
+		if cn, err := client.GetClusterName(); err != nil {
+			log.Warn().Err(err).Str("endpoint", client.Endpoint).Msg("failed to resolve cluster name, rabbitmq.cluster.name will be empty on exchange targets")
+		} else if cn != nil {
 			clusterName = cn.Name
 		}
 

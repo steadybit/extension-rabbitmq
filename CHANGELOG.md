@@ -4,7 +4,10 @@
 
 - feat: discover RabbitMQ exchanges as targets (excluding the default exchange, `amq.*` built-ins and internal exchanges)
 - feat: new attacks "Publish to Exchange (# of Messages)" and "Publish to Exchange (Messages / s)" — delivery is determined by the exchange type and its bindings; unroutable messages count as failures
-- feat: fail the prepare step of the queue publish attacks when the exchange parameter is set and the execution targets more than 10 queues, preventing accidental load amplification
+- feat: fail the prepare step of the queue publish attacks when the exchange parameter is set and more than 10 queue targets publish to the same exchange and routing key, preventing accidental load amplification
+- fix: the publish attacks treated the "Duration (seconds)" parameter as milliseconds, publishing the whole message budget in a burst instead of spreading it across the configured duration
+- fix: reject numberOfMessages = 0 at prepare instead of completing instantly with a confusing 0% success rate
+- fix: log a warning when the cluster name cannot be resolved during discovery instead of silently reporting an empty `rabbitmq.cluster.name`
 
 ## v1.0.21
 

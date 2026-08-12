@@ -5,14 +5,15 @@ package extrabbitmq
 import (
 	"context"
 	"errors"
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
 	"github.com/steadybit/extension-kit/extutil"
 )
 
-type publishExchangeFixedAmountAction struct{}
+type publishExchangeFixedAmountAction struct {
+	fixedAmountPublishBehavior
+}
 
 // ensure interfaces
 var (
@@ -23,10 +24,6 @@ var (
 
 func NewPublishExchangeFixedAmount() action_kit_sdk.Action[PublishMessageAttackState] {
 	return &publishExchangeFixedAmountAction{}
-}
-
-func (a *publishExchangeFixedAmountAction) NewEmptyState() PublishMessageAttackState {
-	return PublishMessageAttackState{}
 }
 
 func (a *publishExchangeFixedAmountAction) Describe() action_kit_api.ActionDescription {
@@ -51,7 +48,7 @@ func (a *publishExchangeFixedAmountAction) Describe() action_kit_api.ActionDescr
 		Kind:        action_kit_api.Attack,
 		TimeControl: action_kit_api.TimeControlInternal,
 		Parameters: []action_kit_api.ActionParameter{
-			routingKey,
+			routingKeyExchange,
 			headers,
 			body,
 			{
@@ -61,6 +58,7 @@ func (a *publishExchangeFixedAmountAction) Describe() action_kit_api.ActionDescr
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     extutil.Ptr(true),
 				DefaultValue: extutil.Ptr("1"),
+				MinValue:     extutil.Ptr(1),
 			},
 			{
 				Name:         "duration",
@@ -86,35 +84,10 @@ func (a *publishExchangeFixedAmountAction) Prepare(ctx context.Context, state *P
 	if extutil.ToInt64(request.Config["duration"]) == 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}
-	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
+	if state.NumberOfMessages == 0 {
+		return nil, errors.New("numberOfMessages must be greater than 0")
+	}
+	// the duration parameter is an integer number of seconds; the pacing helper works in milliseconds
+	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"])*1000, state.NumberOfMessages)
 	return prepareExchange(request, state, checkEndedPublishRabbitFixedAmount)
-}
-
-func (a *publishExchangeFixedAmountAction) Start(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StartResult, error) {
-	start(state)
-	return nil, nil
-}
-
-func (a *publishExchangeFixedAmountAction) Status(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StatusResult, error) {
-	executionRunData, err := loadExecutionRunData(state.ExecutionID)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load execution run data")
-		return nil, err
-	}
-
-	completed := checkEndedPublishRabbitFixedAmount(executionRunData, state)
-	if completed {
-		stopTickers(executionRunData)
-		log.Info().Msg("Action completed")
-	}
-
-	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
-	return &action_kit_api.StatusResult{
-		Completed: completed,
-		Metrics:   extutil.Ptr(latestMetrics),
-	}, nil
-}
-
-func (a *publishExchangeFixedAmountAction) Stop(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StopResult, error) {
-	return stop(state)
 }

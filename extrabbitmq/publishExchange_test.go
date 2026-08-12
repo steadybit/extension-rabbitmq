@@ -90,27 +90,66 @@ func Test_guardExchangeTargetCount_limitsTargetsPerExecution(t *testing.T) {
 	execId := 90001
 	newReq := func() action_kit_api.PrepareActionRequestBody {
 		return action_kit_api.PrepareActionRequestBody{
+			ExecutionId:      uuid.New(),
 			ExecutionContext: &action_kit_api.ExecutionContext{ExperimentKey: &expKey, ExecutionId: &execId},
 		}
 	}
 	for i := 0; i < maxQueueTargetsWithExchange; i++ {
-		require.NoErrorf(t, guardExchangeTargetCount(newReq()), "target %d must be allowed", i+1)
+		require.NoErrorf(t, guardExchangeTargetCount(newReq(), "ex", "rk"), "target %d must be allowed", i+1)
 	}
-	err := guardExchangeTargetCount(newReq())
+	err := guardExchangeTargetCount(newReq(), "ex", "rk")
 	require.Error(t, err, "target %d must be rejected", maxQueueTargetsWithExchange+1)
 	assert.Contains(t, err.Error(), "restrict the target selection")
 
 	// a different execution has its own counter
 	otherExec := 90002
 	otherReq := action_kit_api.PrepareActionRequestBody{
+		ExecutionId:      uuid.New(),
 		ExecutionContext: &action_kit_api.ExecutionContext{ExperimentKey: &expKey, ExecutionId: &otherExec},
 	}
-	require.NoError(t, guardExchangeTargetCount(otherReq))
+	require.NoError(t, guardExchangeTargetCount(otherReq, "ex", "rk"))
+}
+
+func Test_guardExchangeTargetCount_separateStepsDoNotShareBudget(t *testing.T) {
+	// Two publish steps of the same experiment execution targeting different exchanges
+	// (or routing keys) must not abort each other.
+	expKey := "TEST-GUARD-3"
+	execId := 90003
+	newReq := func() action_kit_api.PrepareActionRequestBody {
+		return action_kit_api.PrepareActionRequestBody{
+			ExecutionId:      uuid.New(),
+			ExecutionContext: &action_kit_api.ExecutionContext{ExperimentKey: &expKey, ExecutionId: &execId},
+		}
+	}
+	for i := 0; i < maxQueueTargetsWithExchange; i++ {
+		require.NoError(t, guardExchangeTargetCount(newReq(), "ex-a", "rk"))
+	}
+	// same execution, different destination: full budget available
+	for i := 0; i < maxQueueTargetsWithExchange; i++ {
+		require.NoError(t, guardExchangeTargetCount(newReq(), "ex-b", "rk"))
+	}
+	require.NoError(t, guardExchangeTargetCount(newReq(), "ex-a", "other-key"))
+	// but ex-a/rk is exhausted
+	require.Error(t, guardExchangeTargetCount(newReq(), "ex-a", "rk"))
+}
+
+func Test_guardExchangeTargetCount_retriedPrepareDoesNotConsumeBudget(t *testing.T) {
+	// A platform-side retry of the same target's prepare reuses the action execution ID
+	// and must not count as an additional target.
+	expKey := "TEST-GUARD-4"
+	execId := 90004
+	sameTarget := action_kit_api.PrepareActionRequestBody{
+		ExecutionId:      uuid.New(),
+		ExecutionContext: &action_kit_api.ExecutionContext{ExperimentKey: &expKey, ExecutionId: &execId},
+	}
+	for i := 0; i < maxQueueTargetsWithExchange*3; i++ {
+		require.NoError(t, guardExchangeTargetCount(sameTarget, "ex", "rk"))
+	}
 }
 
 func Test_guardExchangeTargetCount_skipsWithoutExecutionContext(t *testing.T) {
 	for i := 0; i < maxQueueTargetsWithExchange+5; i++ {
-		require.NoError(t, guardExchangeTargetCount(action_kit_api.PrepareActionRequestBody{}))
+		require.NoError(t, guardExchangeTargetCount(action_kit_api.PrepareActionRequestBody{ExecutionId: uuid.New()}, "ex", "rk"))
 	}
 }
 
