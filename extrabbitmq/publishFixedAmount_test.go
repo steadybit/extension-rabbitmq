@@ -53,7 +53,7 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	action := publishRabbitFixedAmountAction{}
 	state := PublishMessageAttackState{NumberOfMessages: 10}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
-		Config:      map[string]any{"duration": 10000, "numberOfMessages": 10, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
+		Config:      map[string]any{"duration": 30, "numberOfMessages": 11, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
 		ExecutionId: uuid.New(),
 		Target: &action_kit_api.Target{
 			Attributes: map[string][]string{
@@ -65,9 +65,22 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	result, err := action.Prepare(context.Background(), &state, req)
 	assert.Nil(t, result)
 	assert.NoError(t, err)
-	assert.Greater(t, state.DelayBetweenRequestsInMS, uint64(0))
+	// duration is seconds: 11 messages over 30s = one message every 3000ms
+	assert.Equal(t, uint64(3000), state.DelayBetweenRequestsInMS)
 	assert.Equal(t, "my-exchange", state.Exchange)
 	assert.Equal(t, "my-key", state.RoutingKey)
+}
+
+func TestPrepareRabbitFixedAmountAction_RejectsZeroMessages(t *testing.T) {
+	action := publishRabbitFixedAmountAction{}
+	state := PublishMessageAttackState{}
+	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
+		Config:      map[string]any{"duration": 30, "numberOfMessages": 0, "maxConcurrent": 1},
+		ExecutionId: uuid.New(),
+	})
+	_, err := action.Prepare(context.Background(), &state, req)
+	require.Error(t, err)
+	assert.EqualError(t, err, "numberOfMessages must be greater than 0")
 }
 
 func TestCheckEndedPublishRabbitFixedAmount(t *testing.T) {

@@ -70,22 +70,99 @@ var (
 	ExecutionRunDataMap = sync.Map{} //make(map[uuid.UUID]*ExecutionRunData)
 )
 
+// maxQueueTargetsWithExchange is the maximum number of queue targets a single publish step
+// may prepare when the exchange parameter is set.
+const maxQueueTargetsWithExchange = 10
+
+var exchangeGuard = struct {
+	sync.Mutex
+	entries map[string]*exchangeGuardEntry
+}{entries: map[string]*exchangeGuardEntry{}}
+
+type exchangeGuardEntry struct {
+	targets  map[uuid.UUID]struct{}
+	lastSeen time.Time
+}
+
+// guardExchangeTargetCount fails the preparation once more than maxQueueTargetsWithExchange
+// targets prepare a queue publish with the same exchange parameter within one experiment
+// execution. With an exchange set, every targeted queue starts an identical publisher against
+// that same exchange, multiplying the load by the number of targets while the targeted queue
+// itself contributes nothing but its vhost.
+//
+// The platform does not tell the extension how many targets an execution has, so distinct
+// target preparations are counted per (experiment execution, exchange, routing key):
+//   - steps publishing to different exchanges or routing keys count separately, so an
+//     execution with several distinct publish steps is not falsely aborted;
+//   - targets are identified by their action execution ID, so a platform-side retry of the
+//     same target's prepare does not consume additional budget;
+//   - the guard is per extension process — with multiple replicas the preparations of one
+//     execution may split across processes and the limit may not be reached.
+func guardExchangeTargetCount(request action_kit_api.PrepareActionRequestBody, exchange, routingKey string) error {
+	ec := request.ExecutionContext
+	if ec == nil || ec.ExperimentKey == nil || ec.ExecutionId == nil {
+		log.Warn().Msg("cannot enforce the exchange target-count guard: the prepare request has no execution context")
+		return nil
+	}
+	key := fmt.Sprintf("%s/%d/%s/%s", *ec.ExperimentKey, *ec.ExecutionId, exchange, routingKey)
+	now := time.Now()
+
+	exchangeGuard.Lock()
+	defer exchangeGuard.Unlock()
+	for k, e := range exchangeGuard.entries {
+		if now.Sub(e.lastSeen) > time.Hour {
+			delete(exchangeGuard.entries, k)
+		}
+	}
+	entry := exchangeGuard.entries[key]
+	if entry == nil {
+		entry = &exchangeGuardEntry{targets: map[uuid.UUID]struct{}{}}
+		exchangeGuard.entries[key] = entry
+	}
+	entry.targets[request.ExecutionId] = struct{}{}
+	entry.lastSeen = now
+	if len(entry.targets) > maxQueueTargetsWithExchange {
+		return fmt.Errorf("the exchange parameter is set and this execution prepared more than %d queue targets publishing to the same exchange: every targeted queue would publish the same messages, multiplying the load on the broker — restrict the target selection to at most %d queues when publishing via an exchange, or use an exchange target instead", maxQueueTargetsWithExchange, maxQueueTargetsWithExchange)
+	}
+	return nil
+}
+
 func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
-	var err error
 	if len(request.Target.Attributes["rabbitmq.queue.name"]) == 0 {
 		return nil, fmt.Errorf("the target is missing the rabbitmq.queue.name attribute")
 	}
 	state.Queue = extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.queue.name")[0]
+	state.Exchange = extutil.ToString(request.Config["exchange"])
+	if state.Exchange != "" {
+		if err := guardExchangeTargetCount(request, state.Exchange, extutil.ToString(request.Config["routingKey"])); err != nil {
+			return nil, err
+		}
+	}
+	return prepareCommon(request, state, "rabbitmq.queue.vhost", checkEnded)
+}
 
-	duration := extutil.ToInt64(request.Config["duration"])
-	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(duration))
+// prepareExchange is the prepare variant for the exchange-targeted publish actions. The exchange
+// comes from the target instead of a config parameter and there is no queue to fall back to for
+// the routing key: an empty routing key is published as-is.
+func prepareExchange(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
+	if len(request.Target.Attributes["rabbitmq.exchange.name"]) == 0 {
+		return nil, fmt.Errorf("the target is missing the rabbitmq.exchange.name attribute")
+	}
+	state.Exchange = extutil.MustHaveValue(request.Target.Attributes, "rabbitmq.exchange.name")[0]
+	return prepareCommon(request, state, "rabbitmq.exchange.vhost", checkEnded)
+}
+
+func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, vhostAttribute string, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
+	var err error
+	// the publish actions declare "duration" as an integer number of seconds
+	durationMs := extutil.ToInt64(request.Config["duration"]) * 1000
+	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(durationMs))
 	state.SuccessRate = extutil.ToInt(request.Config["successRate"])
 	state.MaxConcurrent = extutil.ToInt(request.Config["maxConcurrent"])
 
 	if state.MaxConcurrent == 0 {
 		return nil, fmt.Errorf("max concurrent can't be zero")
 	}
-	state.Exchange = extutil.ToString(request.Config["exchange"])
 	state.RoutingKey = extutil.ToString(request.Config["routingKey"])
 	state.Body = extutil.ToString(request.Config["body"])
 	state.ExecutionID = request.ExecutionId
@@ -99,8 +176,8 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMess
 
 	// determine vhost from target attributes
 	vhostAttr := "/"
-	if len(request.Target.Attributes["rabbitmq.queue.vhost"]) > 0 {
-		vhostAttr = request.Target.Attributes["rabbitmq.queue.vhost"][0]
+	if len(request.Target.Attributes[vhostAttribute]) > 0 {
+		vhostAttr = request.Target.Attributes[vhostAttribute][0]
 	}
 	state.Vhost = vhostAttr
 
@@ -126,8 +203,8 @@ func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMess
 	// Ensure a positive tick interval. If not given, derive from duration/numberOfMessages or default.
 	if state.DelayBetweenRequestsInMS <= 0 {
 		per := int64(0)
-		if duration > 0 && state.NumberOfMessages > 0 {
-			per = duration / int64(state.NumberOfMessages)
+		if durationMs > 0 && state.NumberOfMessages > 0 {
+			per = durationMs / int64(state.NumberOfMessages)
 		}
 		if per <= 0 {
 			per = 100 // 100ms sensible default

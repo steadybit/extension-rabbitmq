@@ -88,12 +88,11 @@ func TestStatusRabbitPeriodicallyAction_ErrorOnMissingRunData(t *testing.T) {
 }
 
 func TestGetExecutionRunData_ReturnsSavedData(t *testing.T) {
-	action := publishRabbitPeriodicallyAction{}
 	id := uuid.New()
 	expected := &ExecutionRunData{}
 	saveExecutionRunData(id, expected)
 
-	got, err := action.getExecutionRunData(id)
+	got, err := loadExecutionRunData(id)
 	require.NoError(t, err)
 	assert.Equal(t, expected, got)
 }

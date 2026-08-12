@@ -167,8 +167,11 @@ discovery:
       vhost: []
       # discovery.attributes.excludes.queue -- List of attributes to exclude from RabbitMQ Queue discovery.
       queue: []
+      # discovery.attributes.excludes.exchange -- List of attributes to exclude from RabbitMQ Exchange discovery.
+      exchange: []
   interval:
     # Adjust intervals based on the volumetry of your targets.
     node: 30
     vhost: 30
     queue: 120
+    exchange: 120

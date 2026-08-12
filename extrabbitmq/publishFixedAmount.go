@@ -5,14 +5,15 @@ package extrabbitmq
 import (
 	"context"
 	"errors"
-	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
 	"github.com/steadybit/extension-kit/extutil"
 )
 
-type publishRabbitFixedAmountAction struct{}
+type publishRabbitFixedAmountAction struct {
+	fixedAmountPublishBehavior
+}
 
 // ensure interfaces
 var (
@@ -23,10 +24,6 @@ var (
 
 func NewPublishRabbitFixedAmount() action_kit_sdk.Action[PublishMessageAttackState] {
 	return &publishRabbitFixedAmountAction{}
-}
-
-func (a *publishRabbitFixedAmountAction) NewEmptyState() PublishMessageAttackState {
-	return PublishMessageAttackState{}
 }
 
 func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescription {
@@ -55,6 +52,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 				Type:         action_kit_api.ActionParameterTypeInteger,
 				Required:     new(true),
 				DefaultValue: new("1"),
+				MinValue:     new(1),
 			},
 			{
 				Name:         "duration",
@@ -89,40 +87,15 @@ func (a *publishRabbitFixedAmountAction) Prepare(ctx context.Context, state *Pub
 	if extutil.ToInt64(request.Config["duration"]) == 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}
-	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
+	if state.NumberOfMessages == 0 {
+		return nil, errors.New("numberOfMessages must be greater than 0")
+	}
+	// the duration parameter is an integer number of seconds; the pacing helper works in milliseconds
+	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"])*1000, state.NumberOfMessages)
 	// reuse existing prepare if present in project
 	return prepare(request, state, checkEndedPublishRabbitFixedAmount)
 }
 
 func checkEndedPublishRabbitFixedAmount(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool {
 	return executionRunData.requestCounter.Load() >= state.NumberOfMessages
-}
-
-func (a *publishRabbitFixedAmountAction) Start(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StartResult, error) {
-	start(state) // reuse existing start helper which should launch worker goroutines
-	return nil, nil
-}
-
-func (a *publishRabbitFixedAmountAction) Status(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StatusResult, error) {
-	executionRunData, err := loadExecutionRunData(state.ExecutionID)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to load execution run data")
-		return nil, err
-	}
-
-	completed := checkEndedPublishRabbitFixedAmount(executionRunData, state)
-	if completed {
-		stopTickers(executionRunData)
-		log.Info().Msg("Action completed")
-	}
-
-	latestMetrics := retrieveLatestMetrics(executionRunData.metrics)
-	return &action_kit_api.StatusResult{
-		Completed: completed,
-		Metrics:   new(latestMetrics),
-	}, nil
-}
-
-func (a *publishRabbitFixedAmountAction) Stop(ctx context.Context, state *PublishMessageAttackState) (*action_kit_api.StopResult, error) {
-	return stop(state)
 }

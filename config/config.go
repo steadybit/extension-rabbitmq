@@ -45,12 +45,14 @@ type Specification struct {
 	RabbitClusterCaFile        string `json:"rabbitClusterCaFile" required:"false" split_words:"true"`
 
 	// Discovery
-	DiscoveryIntervalVhostSeconds     int      `json:"discoveryIntervalVhostSeconds" split_words:"true" required:"false" default:"30"`
-	DiscoveryIntervalNodeSeconds      int      `json:"discoveryIntervalNodeSeconds" split_words:"true" required:"false" default:"30"`
-	DiscoveryIntervalQueueSeconds     int      `json:"discoveryIntervalQueueSeconds" split_words:"true" required:"false" default:"120"`
-	DiscoveryAttributesExcludesVhosts []string `json:"discoveryAttributesExcludesVhosts" split_words:"true" required:"false"`
-	DiscoveryAttributesExcludesQueues []string `json:"discoveryAttributesExcludesQueues" split_words:"true" required:"false"`
-	DiscoveryAttributesExcludesNodes  []string `json:"discoveryAttributesExcludesNodes" split_words:"true" required:"false"`
+	DiscoveryIntervalVhostSeconds        int      `json:"discoveryIntervalVhostSeconds" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalNodeSeconds         int      `json:"discoveryIntervalNodeSeconds" split_words:"true" required:"false" default:"30"`
+	DiscoveryIntervalQueueSeconds        int      `json:"discoveryIntervalQueueSeconds" split_words:"true" required:"false" default:"120"`
+	DiscoveryIntervalExchangeSeconds     int      `json:"discoveryIntervalExchangeSeconds" split_words:"true" required:"false" default:"120"`
+	DiscoveryAttributesExcludesVhosts    []string `json:"discoveryAttributesExcludesVhosts" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesQueues    []string `json:"discoveryAttributesExcludesQueues" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesNodes     []string `json:"discoveryAttributesExcludesNodes" split_words:"true" required:"false"`
+	DiscoveryAttributesExcludesExchanges []string `json:"discoveryAttributesExcludesExchanges" split_words:"true" required:"false"`
 }
 
 var (

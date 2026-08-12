@@ -36,6 +36,16 @@ var (
 		Required:     new(false),
 		DefaultValue: new(""),
 	}
+	// routingKeyExchange is the routing key parameter for the exchange-targeted publish actions:
+	// there is no queue to fall back to, an empty routing key is published as-is.
+	routingKeyExchange = action_kit_api.ActionParameter{
+		Name:         "routingKey",
+		Label:        "Routing Key",
+		Description:  new("Routing key used for message delivery, published as-is. Fanout exchanges ignore it; on direct and topic exchanges an empty or non-matching key makes messages unroutable, which counts as failure."),
+		Type:         action_kit_api.ActionParameterTypeString,
+		Required:     new(false),
+		DefaultValue: new(""),
+	}
 	body = action_kit_api.ActionParameter{
 		Name:         "body",
 		Label:        "Message body",

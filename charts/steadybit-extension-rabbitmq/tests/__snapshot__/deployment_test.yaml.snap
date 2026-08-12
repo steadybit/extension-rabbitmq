@@ -34,6 +34,8 @@ manifest should match snapshot using podAnnotations and Labels:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -117,6 +119,8 @@ manifest should match snapshot with TLS:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
@@ -213,6 +217,8 @@ manifest should match snapshot with custom image registry:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -296,6 +302,8 @@ manifest should match snapshot with extra env vars:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
@@ -390,6 +398,8 @@ manifest should match snapshot with extra labels:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -473,6 +483,8 @@ manifest should match snapshot with global image pull secrets:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
@@ -560,6 +572,8 @@ manifest should match snapshot with global image registry:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -643,6 +657,8 @@ manifest should match snapshot with global priority class:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
@@ -728,6 +744,8 @@ manifest should match snapshot with image pull secrets:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
@@ -815,6 +833,8 @@ manifest should match snapshot with legacy image name containing registry:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -898,6 +918,8 @@ manifest should match snapshot with mutual TLS:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
@@ -1003,6 +1025,8 @@ manifest should match snapshot with mutual TLS using containerPaths:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -1093,6 +1117,8 @@ manifest should match snapshot with podSecurityContext:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -1178,6 +1204,8 @@ manifest should match snapshot with priority class:
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
                   value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
+                  value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
                     secretKeyRef:
@@ -1262,6 +1290,8 @@ manifest should match snapshot without TLS:
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_VHOST_SECONDS
                   value: "30"
                 - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_QUEUE_SECONDS
+                  value: "120"
+                - name: STEADYBIT_EXTENSION_DISCOVERY_INTERVAL_EXCHANGE_SECONDS
                   value: "120"
                 - name: STEADYBIT_EXTENSION_MANAGEMENT_ENDPOINTS_JSON
                   valueFrom:
