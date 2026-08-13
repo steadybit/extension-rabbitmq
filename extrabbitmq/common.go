@@ -21,12 +21,14 @@ const (
 
 var (
 	exchange = action_kit_api.ActionParameter{
-		Name:         "exchange",
-		Label:        "Exchange",
-		Description:  new("Optional. The AMQP exchange to publish to. If empty, messages go directly to the target queue via the default exchange."),
-		Type:         action_kit_api.ActionParameterTypeString,
-		Required:     new(false),
-		DefaultValue: new(""),
+		Name:               "exchange",
+		Label:              "Exchange",
+		Description:        new("Deprecated. The AMQP exchange to publish to. If empty, messages go directly to the target queue via the default exchange."),
+		Type:               action_kit_api.ActionParameterTypeString,
+		Required:           new(false),
+		DefaultValue:       new(""),
+		Deprecated:         new(true),
+		DeprecationMessage: new("To publish via an exchange, use the 'Publish to Exchange' actions instead. If you don't need an exchange, recreate this step."),
 	}
 	routingKey = action_kit_api.ActionParameter{
 		Name:         "routingKey",

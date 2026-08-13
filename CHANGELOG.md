@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.1
+
+- chore: deprecate the exchange parameter of the queue publish attacks — use the Publish to Exchange actions to publish via an exchange, or recreate the step if no exchange is needed. The parameter keeps working; saved experiments are unaffected.
+
 ## v1.1.0
 
 - feat: discover RabbitMQ exchanges as targets (excluding the default exchange, `amq.*` built-ins and internal exchanges)

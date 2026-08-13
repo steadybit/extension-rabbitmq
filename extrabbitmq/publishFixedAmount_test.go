@@ -29,6 +29,25 @@ func TestPublishRabbitFixedAmountAction_Describe(t *testing.T) {
 	assert.GreaterOrEqual(t, len(desc.Parameters), 3)
 }
 
+func TestQueuePublishActions_ExchangeParameterDeprecated(t *testing.T) {
+	for _, desc := range []action_kit_api.ActionDescription{
+		(&publishRabbitFixedAmountAction{}).Describe(),
+		(&publishRabbitPeriodicallyAction{}).Describe(),
+	} {
+		found := false
+		for _, p := range desc.Parameters {
+			if p.Name == "exchange" {
+				found = true
+				require.NotNil(t, p.Deprecated, "%s: exchange must be marked deprecated", desc.Id)
+				assert.True(t, *p.Deprecated, "%s: exchange must be marked deprecated", desc.Id)
+				require.NotNil(t, p.DeprecationMessage, "%s: exchange must carry a deprecation message", desc.Id)
+				assert.Contains(t, *p.DeprecationMessage, "Publish to Exchange")
+			}
+		}
+		require.True(t, found, "%s: exchange parameter must still exist for backward compatibility", desc.Id)
+	}
+}
+
 func TestGetDelayBetweenRequestsInMsFixedAmount(t *testing.T) {
 	assert.Equal(t, uint64(500), getDelayBetweenRequestsInMsFixedAmount(1000, 3))
 	assert.Equal(t, uint64(1000), getDelayBetweenRequestsInMsFixedAmount(1000, 1))
