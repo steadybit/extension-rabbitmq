@@ -2,6 +2,11 @@
 
 ## v1.1.1
 
+- chore(deps): bump steadybit kits and drop Go patch pin (#49)
+- chore: deprecate the exchange parameter of the queue publish attacks (#48)
+
+## v1.1.1
+
 - chore: deprecate the exchange parameter of the queue publish attacks — use the Publish to Exchange actions to publish via an exchange, or recreate the step if no exchange is needed. The parameter keeps working; saved experiments are unaffected.
 
 ## v1.1.0
