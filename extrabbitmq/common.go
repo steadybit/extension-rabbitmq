@@ -3,12 +3,13 @@ package extrabbitmq
 import (
 	"encoding/json"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
-	"testing"
-	"time"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	"github.com/steadybit/extension-rabbitmq/clients"
@@ -70,6 +71,22 @@ var (
 		Type:         action_kit_api.ActionParameterTypeDuration,
 		DefaultValue: new("60s"),
 		Required:     new(true),
+	}
+	durationPublishFixedAmount = action_kit_api.ActionParameter{
+		Name:         "duration",
+		Label:        "Duration",
+		Description:  new("How long the publisher runs. The total number of messages is distributed evenly across this duration."),
+		Type:         action_kit_api.ActionParameterTypeDuration,
+		Required:     new(true),
+		DefaultValue: new("30s"),
+	}
+	durationPublishPeriodically = action_kit_api.ActionParameter{
+		Name:         "duration",
+		Label:        "Duration",
+		Description:  new("How long the publisher runs at the specified rate. Total messages produced = rate x duration."),
+		Type:         action_kit_api.ActionParameterTypeDuration,
+		Required:     new(true),
+		DefaultValue: new("30s"),
 	}
 	successRate = action_kit_api.ActionParameter{
 		Name:         "successRate",

@@ -4,7 +4,6 @@ package extrabbitmq
 
 import (
 	"context"
-	"errors"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
@@ -60,14 +59,7 @@ func (a *publishExchangeFixedAmountAction) Describe() action_kit_api.ActionDescr
 				DefaultValue: extutil.Ptr("1"),
 				MinValue:     extutil.Ptr(1),
 			},
-			{
-				Name:         "duration",
-				Label:        "Duration (seconds)",
-				Description:  extutil.Ptr("How long the publisher runs, in seconds. The total number of messages is distributed evenly across this duration."),
-				Type:         action_kit_api.ActionParameterTypeInteger,
-				Required:     extutil.Ptr(true),
-				DefaultValue: extutil.Ptr("30"),
-			},
+			durationPublishFixedAmount,
 			successRate,
 			maxConcurrent,
 		},
@@ -79,15 +71,5 @@ func (a *publishExchangeFixedAmountAction) Describe() action_kit_api.ActionDescr
 }
 
 func (a *publishExchangeFixedAmountAction) Prepare(ctx context.Context, state *PublishMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
-	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
-
-	if extutil.ToInt64(request.Config["duration"]) == 0 {
-		return nil, errors.New("duration must be greater than 0")
-	}
-	if state.NumberOfMessages == 0 {
-		return nil, errors.New("numberOfMessages must be greater than 0")
-	}
-	// the duration parameter is an integer number of seconds; the pacing helper works in milliseconds
-	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"])*1000, state.NumberOfMessages)
-	return prepareExchange(request, state, checkEndedPublishRabbitFixedAmount)
+	return prepareFixedAmount(request, state, prepareExchange)
 }
