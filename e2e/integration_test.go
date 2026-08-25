@@ -157,9 +157,6 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 // ensureRabbitMQTopology creates the vhost, queue and exchange the tests work with. The exchange is
 // bound to the queue with a catch-all routing key so that messages published by the exchange-targeted
 // publish actions are routable and observable on the queue.
-// ensureRabbitMQTopology creates the vhost, queue and exchange the tests work with. The exchange is
-// bound to the queue with a catch-all routing key so that messages published by the exchange-targeted
-// publish actions are routable and observable on the queue.
 func ensureRabbitMQTopology(minikube *e2e.Minikube) error {
 	script := fmt.Sprintf(`
 curl -fsS -u %[1]s:%[2]s -H 'content-type: application/json' -X PUT http://localhost:15672/api/vhosts/%[3]s >/dev/null
