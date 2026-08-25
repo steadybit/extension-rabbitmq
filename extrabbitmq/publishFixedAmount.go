@@ -4,11 +4,9 @@ package extrabbitmq
 
 import (
 	"context"
-	"errors"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/action-kit/go/action_kit_sdk"
 	"github.com/steadybit/extension-kit/extbuild"
-	"github.com/steadybit/extension-kit/extutil"
 )
 
 type publishRabbitFixedAmountAction struct {
@@ -54,14 +52,7 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 				DefaultValue: new("1"),
 				MinValue:     new(1),
 			},
-			{
-				Name:         "duration",
-				Label:        "Duration (seconds)",
-				Description:  new("How long the publisher runs, in seconds. The total number of messages is distributed evenly across this duration."),
-				Type:         action_kit_api.ActionParameterTypeInteger,
-				Required:     new(true),
-				DefaultValue: new("30"),
-			},
+			durationPublishFixedAmount,
 			maxConcurrent,
 		},
 		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{
@@ -80,20 +71,8 @@ func getDelayBetweenRequestsInMsFixedAmount(duration uint64, numberOfRequests ui
 	}
 }
 
-// Prepare validates request and sets up state. It defers to shared prepare helpers where available.
 func (a *publishRabbitFixedAmountAction) Prepare(ctx context.Context, state *PublishMessageAttackState, request action_kit_api.PrepareActionRequestBody) (*action_kit_api.PrepareResult, error) {
-	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
-
-	if extutil.ToInt64(request.Config["duration"]) == 0 {
-		return nil, errors.New("duration must be greater than 0")
-	}
-	if state.NumberOfMessages == 0 {
-		return nil, errors.New("numberOfMessages must be greater than 0")
-	}
-	// the duration parameter is an integer number of seconds; the pacing helper works in milliseconds
-	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"])*1000, state.NumberOfMessages)
-	// reuse existing prepare if present in project
-	return prepare(request, state, checkEndedPublishRabbitFixedAmount)
+	return prepareFixedAmount(request, state, prepare)
 }
 
 func checkEndedPublishRabbitFixedAmount(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool {

@@ -4,7 +4,7 @@
 package e2e
 
 import (
-	"context"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +16,17 @@ import (
 	"github.com/steadybit/discovery-kit/go/discovery_kit_api"
 	discValidate "github.com/steadybit/discovery-kit/go/discovery_kit_test/validate"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+)
+
+// Topology created by helmInstallRabbitMQ and used by both the discovery and the action tests.
+const (
+	rabbitNamespace = "default"
+	rabbitPod       = "my-rabbitmq-0"
+	rabbitUser      = "user"
+	rabbitPassword  = "bitnami" //NOSONAR go:S2068 - fixture credentials of a throwaway broker
+	rabbitVhost     = "order"
+	rabbitQueue     = "order"
+	rabbitExchange  = "e2e.topic"
 )
 
 func TestWithMinikube(t *testing.T) {
@@ -25,7 +35,12 @@ func TestWithMinikube(t *testing.T) {
 		Name: "extension-rabbitmq",
 		Port: 8083,
 		ExtraArgs: func(m *e2e.Minikube) []string {
-			endpointsJSON := `[{"url":"http://my-rabbitmq.default.svc.cluster.local:15672","username":"user","password":"bitnami","amqp":{"url":"amqp://my-rabbitmq.default.svc.cluster.local:5672/","vhost":"/"}}]`
+			// The AMQP credentials are configured separately from the management ones: the publish
+			// actions dial AMQP with endpoint.amqp.username/password only and do not fall back to
+			// the management credentials.
+			endpointsJSON := fmt.Sprintf(
+				`[{"url":"http://my-rabbitmq.default.svc.cluster.local:15672","username":%q,"password":%q,"amqp":{"url":"amqp://my-rabbitmq.default.svc.cluster.local:5672/","vhost":"/","username":%q,"password":%q}}]`,
+				rabbitUser, rabbitPassword, rabbitUser, rabbitPassword)
 			return []string{
 				"--set", "logging.level=debug",
 				"--set-json", "rabbitmq.auth.managementEndpoints=" + endpointsJSON,
@@ -43,6 +58,17 @@ func TestWithMinikube(t *testing.T) {
 			{Name: "discover queues", Test: testDiscoverQueues},
 			{Name: "discover nodes", Test: testDiscoverNodes},
 			{Name: "discover exchanges", Test: testDiscoverExchanges},
+			// The action tests share the queue created above and run in order: the backlog check
+			// expecting an empty queue must run before anything publishes into it.
+			{Name: "check node reports no changes", Test: testCheckNodeReportsNoChanges},
+			{Name: "check node fails without the expected change", Test: testCheckNodeFailsWithoutExpectedChange},
+			{Name: "check queue backlog below threshold", Test: testCheckQueueBacklogBelowThreshold},
+			{Name: "alter queue max length", Test: testAlterQueueMaxLength},
+			{Name: "publish fixed amount to queue", Test: testPublishFixedAmountToQueue},
+			{Name: "publish periodically to queue", Test: testPublishPeriodicallyToQueue},
+			{Name: "publish fixed amount to exchange", Test: testPublishFixedAmountToExchange},
+			{Name: "check queue backlog above threshold", Test: testCheckQueueBacklogAboveThreshold},
+			{Name: "check queue backlog fails early", Test: testCheckQueueBacklogFailsEarly},
 		},
 	)
 }
@@ -56,26 +82,18 @@ func validateActions(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
 }
 
 func testDiscoverVhosts(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	target, err := e2e.PollForTarget(ctx, e, "com.steadybit.extension_rabbitmq.vhost", func(t discovery_kit_api.Target) bool {
-		return len(t.Attributes["rabbitmq.vhost.name"]) > 0
+	target := pollTarget(t, e, "com.steadybit.extension_rabbitmq.vhost", func(target discovery_kit_api.Target) bool {
+		return len(target.Attributes["rabbitmq.vhost.name"]) > 0
 	})
-	require.NoError(t, err)
 	assert.Equal(t, "com.steadybit.extension_rabbitmq.vhost", target.TargetType)
 	assert.NotEmpty(t, target.Attributes["rabbitmq.vhost.name"])
 	assert.NotEmpty(t, target.Attributes["rabbitmq.cluster.name"])
 }
 
 func testDiscoverQueues(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	target, err := e2e.PollForTarget(ctx, e, "com.steadybit.extension_rabbitmq.queue", func(t discovery_kit_api.Target) bool {
-		return len(t.Attributes["rabbitmq.queue.name"]) > 0
+	target := pollTarget(t, e, "com.steadybit.extension_rabbitmq.queue", func(target discovery_kit_api.Target) bool {
+		return len(target.Attributes["rabbitmq.queue.name"]) > 0
 	})
-	require.NoError(t, err)
 	assert.Equal(t, "com.steadybit.extension_rabbitmq.queue", target.TargetType)
 	assert.NotEmpty(t, target.Attributes["rabbitmq.queue.vhost"])
 	assert.NotEmpty(t, target.Attributes["rabbitmq.queue.name"])
@@ -84,27 +102,19 @@ func testDiscoverQueues(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
 }
 
 func testDiscoverNodes(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	target, err := e2e.PollForTarget(ctx, e, "com.steadybit.extension_rabbitmq.node", func(t discovery_kit_api.Target) bool {
-		return len(t.Attributes["rabbitmq.node.name"]) > 0
+	target := pollTarget(t, e, "com.steadybit.extension_rabbitmq.node", func(target discovery_kit_api.Target) bool {
+		return len(target.Attributes["rabbitmq.node.name"]) > 0
 	})
-	require.NoError(t, err)
 	assert.Equal(t, "com.steadybit.extension_rabbitmq.node", target.TargetType)
 	assert.NotEmpty(t, target.Attributes["rabbitmq.node.running"])
 }
 
 func testDiscoverExchanges(t *testing.T, _ *e2e.Minikube, e *e2e.Extension) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	target, err := e2e.PollForTarget(ctx, e, "com.steadybit.extension_rabbitmq.exchange", func(t discovery_kit_api.Target) bool {
-		return len(t.Attributes["rabbitmq.exchange.name"]) > 0 && t.Attributes["rabbitmq.exchange.name"][0] == "e2e.topic"
+	target := pollTarget(t, e, "com.steadybit.extension_rabbitmq.exchange", func(target discovery_kit_api.Target) bool {
+		return e2e.HasAttribute(target, "rabbitmq.exchange.name", rabbitExchange)
 	})
-	require.NoError(t, err)
 	assert.Equal(t, "com.steadybit.extension_rabbitmq.exchange", target.TargetType)
-	assert.Equal(t, []string{"order"}, target.Attributes["rabbitmq.exchange.vhost"])
+	assert.Equal(t, []string{rabbitVhost}, target.Attributes["rabbitmq.exchange.vhost"])
 	assert.Equal(t, []string{"topic"}, target.Attributes["rabbitmq.exchange.type"])
 	assert.NotEmpty(t, target.Attributes["rabbitmq.amqp.url"])
 }
@@ -118,11 +128,11 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 	args := []string{
 		"upgrade", "--install",
 		"--kube-context", minikube.Profile,
-		"--namespace", "default",
+		"--namespace", rabbitNamespace,
 		"--create-namespace",
 		"my-rabbitmq", "bitnami/rabbitmq",
-		"--set", "auth.username=user",
-		"--set", "auth.password=bitnami", //NOSONAR go:S2068
+		"--set", "auth.username=" + rabbitUser,
+		"--set", "auth.password=" + rabbitPassword, //NOSONAR go:S2068
 		"--set", "metrics.enabled=true",
 		"--set", "image.repository=bitnamilegacy/rabbitmq",
 		"--set", "image.tag=4.1.3-debian-12-r0",
@@ -138,33 +148,51 @@ func helmInstallRabbitMQ(minikube *e2e.Minikube) error {
 	// but the Helm --wait is typically enough for the statefulset and service readiness.
 	_ = os.Setenv("RABBITMQ_SERVICE", "my-rabbitmq.default.svc.cluster.local")
 	// Create vhost and queue via management API from inside the pod
-	if err := ensureRabbitMQTopology(minikube, "default", "my-rabbitmq-0", "user", "bitnami", "order", "order"); err != nil {
+	if err := ensureRabbitMQTopology(minikube); err != nil {
 		return fmt.Errorf("failed to create vhost/queue: %w", err)
 	}
 	return nil
 }
 
-func ensureRabbitMQTopology(minikube *e2e.Minikube, ns, pod, user, pass, vhost, queue string) error {
+// ensureRabbitMQTopology creates the vhost, queue and exchange the tests work with. The exchange is
+// bound to the queue with a catch-all routing key so that messages published by the exchange-targeted
+// publish actions are routable and observable on the queue.
+func ensureRabbitMQTopology(minikube *e2e.Minikube) error {
+	script := fmt.Sprintf(`
+curl -fsS -u %[1]s:%[2]s -H 'content-type: application/json' -X PUT http://localhost:15672/api/vhosts/%[3]s >/dev/null
+curl -fsS -u %[1]s:%[2]s -H 'content-type: application/json' -X PUT http://localhost:15672/api/permissions/%[3]s/%[1]s -d '{"configure":".*","write":".*","read":".*"}' >/dev/null
+curl -fsS -u %[1]s:%[2]s -H 'content-type: application/json' -X PUT http://localhost:15672/api/queues/%[3]s/%[4]s -d '{"durable":true}' >/dev/null
+curl -fsS -u %[1]s:%[2]s -H 'content-type: application/json' -X PUT http://localhost:15672/api/exchanges/%[3]s/%[5]s -d '{"type":"topic","durable":true}' >/dev/null
+curl -fsS -u %[1]s:%[2]s -H 'content-type: application/json' -X POST http://localhost:15672/api/bindings/%[3]s/e/%[5]s/q/%[4]s -d '{"routing_key":"#"}' >/dev/null
+`, rabbitUser, rabbitPassword, rabbitVhost, rabbitQueue, rabbitExchange)
+
 	// Retry loop because management may need a few seconds even after --wait
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
-		cmd := exec.Command( //NOSONAR go:S4036
-			"kubectl", "--context", minikube.Profile, "-n", ns, "exec", pod, "--", "bash", "-ceu",
-			fmt.Sprintf(`
-set -o pipefail
-curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/vhosts/%s >/dev/null
-curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/permissions/%s/%s -d '{"configure":".*","write":".*","read":".*"}' >/dev/null
-curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/queues/%s/%s -d '{"durable":true}' >/dev/null
-curl -fsS -u %s:%s -H 'content-type: application/json' -X PUT http://localhost:15672/api/exchanges/%s/e2e.topic -d '{"type":"topic","durable":true}' >/dev/null
-`, user, pass, vhost, user, pass, vhost, user, user, pass, vhost, queue, user, pass, vhost),
-		)
-		out, err := cmd.CombinedOutput()
+		_, err := rabbitMgmtExec(minikube, script)
 		if err == nil {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("kubectl exec failed: %v: %s", err, string(out))
+			return err
 		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+// rabbitMgmtExec runs a shell script inside the broker pod and returns its stdout. Only stdout is
+// returned: kubectl writes notices such as "Defaulted container ..." to stderr, which would
+// otherwise corrupt a JSON response.
+func rabbitMgmtExec(minikube *e2e.Minikube, script string) (string, error) {
+	var stderr bytes.Buffer
+	cmd := exec.Command( //NOSONAR go:S4036
+		"kubectl", "--context", minikube.Profile, "-n", rabbitNamespace, "exec", rabbitPod, "-c", "rabbitmq", "--",
+		"bash", "-ceu", "set -o pipefail\n"+script,
+	)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("kubectl exec failed: %w: %s", err, stderr.String())
+	}
+	return string(out), nil
 }

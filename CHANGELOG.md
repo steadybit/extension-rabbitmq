@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.0
+
+- fix: declare the duration of the four publish attacks as a duration parameter instead of an integer number of seconds, matching every other action in this extension. The platform sends this value in milliseconds, so the previous declaration made the publish pacing disagree with the step duration derived from the same parameter. Saved publish steps keep their stored number, which now means milliseconds instead of seconds — re-set the duration on existing steps.
+
 ## v1.1.2
 
 - chore(deps): bump github.com/rabbitmq/amqp091-go from 1.13.0 to 1.14.0

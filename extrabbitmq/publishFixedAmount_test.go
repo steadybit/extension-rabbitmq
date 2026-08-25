@@ -5,13 +5,14 @@ package extrabbitmq
 
 import (
 	"context"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/steadybit/action-kit/go/action_kit_api/v2"
 	"github.com/steadybit/extension-kit/extutil"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestPublishRabbitFixedAmountAction_Describe(t *testing.T) {
@@ -34,17 +35,39 @@ func TestQueuePublishActions_ExchangeParameterDeprecated(t *testing.T) {
 		(&publishRabbitFixedAmountAction{}).Describe(),
 		(&publishRabbitPeriodicallyAction{}).Describe(),
 	} {
-		found := false
-		for _, p := range desc.Parameters {
-			if p.Name == "exchange" {
-				found = true
-				require.NotNil(t, p.Deprecated, "%s: exchange must be marked deprecated", desc.Id)
-				assert.True(t, *p.Deprecated, "%s: exchange must be marked deprecated", desc.Id)
-				require.NotNil(t, p.DeprecationMessage, "%s: exchange must carry a deprecation message", desc.Id)
-				assert.Contains(t, *p.DeprecationMessage, "Publish to Exchange")
-			}
+		p := requireParam(t, desc, "exchange")
+		require.NotNil(t, p.Deprecated, "%s: exchange must be marked deprecated", desc.Id)
+		assert.True(t, *p.Deprecated, "%s: exchange must be marked deprecated", desc.Id)
+		require.NotNil(t, p.DeprecationMessage, "%s: exchange must carry a deprecation message", desc.Id)
+		assert.Contains(t, *p.DeprecationMessage, "Publish to Exchange")
+	}
+}
+
+// requireParam returns the named parameter of an action description, failing the test if the
+// action does not declare it.
+func requireParam(t *testing.T, desc action_kit_api.ActionDescription, name string) action_kit_api.ActionParameter {
+	t.Helper()
+	for _, p := range desc.Parameters {
+		if p.Name == name {
+			return p
 		}
-		require.True(t, found, "%s: exchange parameter must still exist for backward compatibility", desc.Id)
+	}
+	require.FailNowf(t, "missing parameter", "%s: no %s parameter", desc.Id, name)
+	return action_kit_api.ActionParameter{}
+}
+
+// The publish actions used to declare duration as an integer number of seconds, which made the
+// pacing disagree with the step duration the platform derives from the same parameter. They now
+// share one declaration and follow the convention used by every other action.
+func TestPublishActions_DeclareDurationAsDuration(t *testing.T) {
+	for _, desc := range []action_kit_api.ActionDescription{
+		(&publishRabbitFixedAmountAction{}).Describe(),
+		(&publishRabbitPeriodicallyAction{}).Describe(),
+		(&publishExchangeFixedAmountAction{}).Describe(),
+		(&publishExchangePeriodicallyAction{}).Describe(),
+	} {
+		p := requireParam(t, desc, "duration")
+		assert.Equal(t, action_kit_api.ActionParameterTypeDuration, p.Type, "%s: duration must use the duration type", desc.Id)
 	}
 }
 
@@ -72,7 +95,7 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	action := publishRabbitFixedAmountAction{}
 	state := PublishMessageAttackState{NumberOfMessages: 10}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
-		Config:      map[string]any{"duration": 30, "numberOfMessages": 11, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
+		Config:      map[string]any{"duration": 30000, "numberOfMessages": 11, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
 		ExecutionId: uuid.New(),
 		Target: &action_kit_api.Target{
 			Attributes: map[string][]string{
@@ -84,7 +107,7 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	result, err := action.Prepare(context.Background(), &state, req)
 	assert.Nil(t, result)
 	assert.NoError(t, err)
-	// duration is seconds: 11 messages over 30s = one message every 3000ms
+	// duration is in milliseconds: 11 messages over 30000ms = one message every 3000ms
 	assert.Equal(t, uint64(3000), state.DelayBetweenRequestsInMS)
 	assert.Equal(t, "my-exchange", state.Exchange)
 	assert.Equal(t, "my-key", state.RoutingKey)
@@ -94,7 +117,7 @@ func TestPrepareRabbitFixedAmountAction_RejectsZeroMessages(t *testing.T) {
 	action := publishRabbitFixedAmountAction{}
 	state := PublishMessageAttackState{}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
-		Config:      map[string]any{"duration": 30, "numberOfMessages": 0, "maxConcurrent": 1},
+		Config:      map[string]any{"duration": 30000, "numberOfMessages": 0, "maxConcurrent": 1},
 		ExecutionId: uuid.New(),
 	})
 	_, err := action.Prepare(context.Background(), &state, req)

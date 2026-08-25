@@ -5,7 +5,14 @@ package extrabbitmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog/log"
@@ -13,11 +20,6 @@ import (
 	"github.com/steadybit/extension-kit/extutil"
 	"github.com/steadybit/extension-rabbitmq/clients"
 	"github.com/steadybit/extension-rabbitmq/config"
-	"net/url"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type ExecutionRunData struct {
@@ -128,6 +130,22 @@ func guardExchangeTargetCount(request action_kit_api.PrepareActionRequestBody, e
 	return nil
 }
 
+// prepareFixedAmount carries the preparation shared by the fixed-amount publish actions (queue and
+// exchange targeted): both spread a fixed number of messages evenly across the duration, and differ
+// only in how the publish destination is resolved. prepareTarget is prepare or prepareExchange.
+func prepareFixedAmount(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, prepareTarget func(action_kit_api.PrepareActionRequestBody, *PublishMessageAttackState, func(*ExecutionRunData, *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error)) (*action_kit_api.PrepareResult, error) {
+	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
+
+	if extutil.ToInt64(request.Config["duration"]) == 0 {
+		return nil, errors.New("duration must be greater than 0")
+	}
+	if state.NumberOfMessages == 0 {
+		return nil, errors.New("numberOfMessages must be greater than 0")
+	}
+	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
+	return prepareTarget(request, state, checkEndedPublishRabbitFixedAmount)
+}
+
 func prepare(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
 	if len(request.Target.Attributes["rabbitmq.queue.name"]) == 0 {
 		return nil, fmt.Errorf("the target is missing the rabbitmq.queue.name attribute")
@@ -155,8 +173,8 @@ func prepareExchange(request action_kit_api.PrepareActionRequestBody, state *Pub
 
 func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, vhostAttribute string, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
 	var err error
-	// the publish actions declare "duration" as an integer number of seconds
-	durationMs := extutil.ToInt64(request.Config["duration"]) * 1000
+	// the platform sends "duration" in milliseconds for every action parameter of type duration
+	durationMs := extutil.ToInt64(request.Config["duration"])
 	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(durationMs))
 	state.SuccessRate = extutil.ToInt(request.Config["successRate"])
 	state.MaxConcurrent = extutil.ToInt(request.Config["maxConcurrent"])
