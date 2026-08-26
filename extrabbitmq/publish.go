@@ -130,9 +130,8 @@ func guardExchangeTargetCount(request action_kit_api.PrepareActionRequestBody, e
 	return nil
 }
 
-// prepareFixedAmount carries the preparation shared by the fixed-amount publish actions (queue and
-// exchange targeted): both spread a fixed number of messages evenly across the duration, and differ
-// only in how the publish destination is resolved. prepareTarget is prepare or prepareExchange.
+// prepareFixedAmount is shared by the queue and exchange fixed-amount publish actions, which
+// differ only in how the destination is resolved. prepareTarget is prepare or prepareExchange.
 func prepareFixedAmount(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, prepareTarget func(action_kit_api.PrepareActionRequestBody, *PublishMessageAttackState, func(*ExecutionRunData, *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error)) (*action_kit_api.PrepareResult, error) {
 	state.NumberOfMessages = extutil.ToUInt64(request.Config["numberOfMessages"])
 
@@ -142,7 +141,6 @@ func prepareFixedAmount(request action_kit_api.PrepareActionRequestBody, state *
 	if state.NumberOfMessages == 0 {
 		return nil, errors.New("numberOfMessages must be greater than 0")
 	}
-	// the duration parameter is an integer number of seconds; the pacing helper works in milliseconds
 	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"])*1000, state.NumberOfMessages)
 	return prepareTarget(request, state, checkEndedPublishRabbitFixedAmount)
 }
@@ -174,7 +172,6 @@ func prepareExchange(request action_kit_api.PrepareActionRequestBody, state *Pub
 
 func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, vhostAttribute string, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
 	var err error
-	// the publish actions declare "duration" as an integer number of seconds
 	durationMs := extutil.ToInt64(request.Config["duration"]) * 1000
 	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(durationMs))
 	state.SuccessRate = extutil.ToInt(request.Config["successRate"])

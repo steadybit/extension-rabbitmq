@@ -56,9 +56,7 @@ func requireParam(t *testing.T, desc action_kit_api.ActionDescription, name stri
 	return action_kit_api.ActionParameter{}
 }
 
-// The publish actions share one duration declaration, an integer number of seconds. Saved steps
-// store this parameter as a bare number, so switching to the duration type breaks them in the
-// agent before the prepare request reaches this extension - see the note in common.go.
+// See the note on durationPublishFixedAmount in common.go for why the type cannot move.
 func TestPublishActions_DeclareDurationAsIntegerSeconds(t *testing.T) {
 	for _, desc := range []action_kit_api.ActionDescription{
 		(&publishRabbitFixedAmountAction{}).Describe(),
