@@ -72,21 +72,26 @@ var (
 		DefaultValue: new("60s"),
 		Required:     new(true),
 	}
+	// The publish actions deliberately keep "duration" as an integer number of seconds instead of
+	// the duration type used elsewhere. Saved experiment steps store this parameter as a bare JSON
+	// number, and the agent's duration parameter translator reads a duration value as a string: an
+	// existing step would fail before the prepare request reaches this extension. Changing the type
+	// is a breaking change for every saved step, so it must not be done silently.
 	durationPublishFixedAmount = action_kit_api.ActionParameter{
 		Name:         "duration",
-		Label:        "Duration",
-		Description:  new("How long the publisher runs. The total number of messages is distributed evenly across this duration."),
-		Type:         action_kit_api.ActionParameterTypeDuration,
+		Label:        "Duration (seconds)",
+		Description:  new("How long the publisher runs, in seconds. The total number of messages is distributed evenly across this duration."),
+		Type:         action_kit_api.ActionParameterTypeInteger,
 		Required:     new(true),
-		DefaultValue: new("30s"),
+		DefaultValue: new("30"),
 	}
 	durationPublishPeriodically = action_kit_api.ActionParameter{
 		Name:         "duration",
-		Label:        "Duration",
-		Description:  new("How long the publisher runs at the specified rate. Total messages produced = rate x duration."),
-		Type:         action_kit_api.ActionParameterTypeDuration,
+		Label:        "Duration (seconds)",
+		Description:  new("How long the publisher runs at the specified rate, in seconds. Total messages produced = rate x duration."),
+		Type:         action_kit_api.ActionParameterTypeInteger,
 		Required:     new(true),
-		DefaultValue: new("30s"),
+		DefaultValue: new("30"),
 	}
 	successRate = action_kit_api.ActionParameter{
 		Name:         "successRate",

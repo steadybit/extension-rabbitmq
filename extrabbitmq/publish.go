@@ -142,7 +142,8 @@ func prepareFixedAmount(request action_kit_api.PrepareActionRequestBody, state *
 	if state.NumberOfMessages == 0 {
 		return nil, errors.New("numberOfMessages must be greater than 0")
 	}
-	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"]), state.NumberOfMessages)
+	// the duration parameter is an integer number of seconds; the pacing helper works in milliseconds
+	state.DelayBetweenRequestsInMS = getDelayBetweenRequestsInMsFixedAmount(extutil.ToUInt64(request.Config["duration"])*1000, state.NumberOfMessages)
 	return prepareTarget(request, state, checkEndedPublishRabbitFixedAmount)
 }
 
@@ -173,8 +174,8 @@ func prepareExchange(request action_kit_api.PrepareActionRequestBody, state *Pub
 
 func prepareCommon(request action_kit_api.PrepareActionRequestBody, state *PublishMessageAttackState, vhostAttribute string, checkEnded func(executionRunData *ExecutionRunData, state *PublishMessageAttackState) bool) (*action_kit_api.PrepareResult, error) {
 	var err error
-	// the platform sends "duration" in milliseconds for every action parameter of type duration
-	durationMs := extutil.ToInt64(request.Config["duration"])
+	// the publish actions declare "duration" as an integer number of seconds
+	durationMs := extutil.ToInt64(request.Config["duration"]) * 1000
 	state.Timeout = time.Now().Add(time.Millisecond * time.Duration(durationMs))
 	state.SuccessRate = extutil.ToInt(request.Config["successRate"])
 	state.MaxConcurrent = extutil.ToInt(request.Config["maxConcurrent"])

@@ -56,10 +56,10 @@ func requireParam(t *testing.T, desc action_kit_api.ActionDescription, name stri
 	return action_kit_api.ActionParameter{}
 }
 
-// The publish actions used to declare duration as an integer number of seconds, which made the
-// pacing disagree with the step duration the platform derives from the same parameter. They now
-// share one declaration and follow the convention used by every other action.
-func TestPublishActions_DeclareDurationAsDuration(t *testing.T) {
+// The publish actions share one duration declaration, an integer number of seconds. Saved steps
+// store this parameter as a bare number, so switching to the duration type breaks them in the
+// agent before the prepare request reaches this extension - see the note in common.go.
+func TestPublishActions_DeclareDurationAsIntegerSeconds(t *testing.T) {
 	for _, desc := range []action_kit_api.ActionDescription{
 		(&publishRabbitFixedAmountAction{}).Describe(),
 		(&publishRabbitPeriodicallyAction{}).Describe(),
@@ -67,7 +67,9 @@ func TestPublishActions_DeclareDurationAsDuration(t *testing.T) {
 		(&publishExchangePeriodicallyAction{}).Describe(),
 	} {
 		p := requireParam(t, desc, "duration")
-		assert.Equal(t, action_kit_api.ActionParameterTypeDuration, p.Type, "%s: duration must use the duration type", desc.Id)
+		assert.Equal(t, action_kit_api.ActionParameterTypeInteger, p.Type, "%s: duration must stay an integer number of seconds", desc.Id)
+		require.NotNil(t, p.DefaultValue, "%s: duration must declare a default", desc.Id)
+		assert.Equal(t, "30", *p.DefaultValue, "%s: duration default must be a plain number of seconds", desc.Id)
 	}
 }
 
@@ -95,7 +97,7 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	action := publishRabbitFixedAmountAction{}
 	state := PublishMessageAttackState{NumberOfMessages: 10}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
-		Config:      map[string]any{"duration": 30000, "numberOfMessages": 11, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
+		Config:      map[string]any{"duration": 30, "numberOfMessages": 11, "maxConcurrent": 1, "exchange": "my-exchange", "routingKey": "my-key"},
 		ExecutionId: uuid.New(),
 		Target: &action_kit_api.Target{
 			Attributes: map[string][]string{
@@ -107,7 +109,7 @@ func TestPrepareRabbitFixedAmountAction_SetsDelayAndState(t *testing.T) {
 	result, err := action.Prepare(context.Background(), &state, req)
 	assert.Nil(t, result)
 	assert.NoError(t, err)
-	// duration is in milliseconds: 11 messages over 30000ms = one message every 3000ms
+	// duration is in seconds: 11 messages spread over the 30s window is one message every 3000ms
 	assert.Equal(t, uint64(3000), state.DelayBetweenRequestsInMS)
 	assert.Equal(t, "my-exchange", state.Exchange)
 	assert.Equal(t, "my-key", state.RoutingKey)
@@ -117,7 +119,7 @@ func TestPrepareRabbitFixedAmountAction_RejectsZeroMessages(t *testing.T) {
 	action := publishRabbitFixedAmountAction{}
 	state := PublishMessageAttackState{}
 	req := extutil.JsonMangle(action_kit_api.PrepareActionRequestBody{
-		Config:      map[string]any{"duration": 30000, "numberOfMessages": 0, "maxConcurrent": 1},
+		Config:      map[string]any{"duration": 30, "numberOfMessages": 0, "maxConcurrent": 1},
 		ExecutionId: uuid.New(),
 	})
 	_, err := action.Prepare(context.Background(), &state, req)

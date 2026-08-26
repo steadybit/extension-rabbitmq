@@ -192,7 +192,7 @@ func testPublishFixedAmountToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extensi
 		Body             string `json:"body"`
 		SuccessRate      int    `json:"successRate"`
 		MaxConcurrent    int    `json:"maxConcurrent"`
-	}{NumberOfMessages: 20, Duration: 3000, Body: "e2e-queue", SuccessRate: 100, MaxConcurrent: 2}
+	}{NumberOfMessages: 20, Duration: 3, Body: "e2e-queue", SuccessRate: 100, MaxConcurrent: 2}
 
 	action, err := e.RunAction(queuePublishFixedActionId, target, config, &action_kit_api.ExecutionContext{})
 	require.NoError(t, err)
@@ -209,20 +209,21 @@ func testPublishPeriodicallyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extens
 	require.NoError(t, err)
 
 	// This action has external time control: the client stops it after the configured duration.
+	// The publish actions take the duration as an integer number of seconds, unlike the checks.
 	config := struct {
 		MessagesPerSecond int    `json:"messagesPerSecond"`
 		Duration          int    `json:"duration"`
 		Body              string `json:"body"`
 		SuccessRate       int    `json:"successRate"`
 		MaxConcurrent     int    `json:"maxConcurrent"`
-	}{MessagesPerSecond: 5, Duration: 4000, Body: "e2e-periodic", SuccessRate: 100, MaxConcurrent: 1}
+	}{MessagesPerSecond: 5, Duration: 4, Body: "e2e-periodic", SuccessRate: 100, MaxConcurrent: 1}
 
 	action, err := e.RunAction(queuePublishPeriodicActionId, target, config, &action_kit_api.ExecutionContext{})
 	require.NoError(t, err)
 	defer func() { _ = action.Cancel() }()
 
 	require.NoError(t, action.Wait(), "all messages must be published successfully")
-	// 5 messages/s for ~6s, asserted conservatively to stay robust on a loaded CI runner.
+	// 5 messages/s for ~4s, asserted conservatively to stay robust on a loaded CI runner.
 	requireQueueGrewBy(t, m, before, 10)
 }
 
@@ -242,7 +243,7 @@ func testPublishFixedAmountToExchange(t *testing.T, m *e2e.Minikube, e *e2e.Exte
 		Body             string `json:"body"`
 		SuccessRate      int    `json:"successRate"`
 		MaxConcurrent    int    `json:"maxConcurrent"`
-	}{NumberOfMessages: 10, Duration: 2000, RoutingKey: "e2e.key", Body: "e2e-exchange", SuccessRate: 100, MaxConcurrent: 1}
+	}{NumberOfMessages: 10, Duration: 2, RoutingKey: "e2e.key", Body: "e2e-exchange", SuccessRate: 100, MaxConcurrent: 1}
 
 	action, err := e.RunAction(exchangePublishFixedActionId, target, config, &action_kit_api.ExecutionContext{})
 	require.NoError(t, err)
