@@ -72,11 +72,8 @@ var (
 		DefaultValue: new("60s"),
 		Required:     new(true),
 	}
-	// The publish actions deliberately keep "duration" as an integer number of seconds instead of
-	// the duration type used elsewhere. Saved experiment steps store this parameter as a bare JSON
-	// number, and the agent's duration parameter translator reads a duration value as a string: an
-	// existing step would fail before the prepare request reaches this extension. Changing the type
-	// is a breaking change for every saved step, so it must not be done silently.
+	// "duration" stays an integer number of seconds. Saved steps store it as a bare number, which
+	// the agent's duration parameter translator cannot read, so the duration type breaks them.
 	durationPublishFixedAmount = action_kit_api.ActionParameter{
 		Name:         "duration",
 		Label:        "Duration (seconds)",
