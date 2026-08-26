@@ -208,15 +208,19 @@ func testPublishPeriodicallyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extens
 	before, err := queueMessageCount(m)
 	require.NoError(t, err)
 
-	// This action has external time control: the client stops it after the configured duration.
-	// The publish actions take the duration as an integer number of seconds, unlike the checks.
+	// This action has external time control, so the action_kit_test client is what ends the run: it
+	// reads "duration" from the config as milliseconds and cancels after that (client.go
+	// prepareAction). The action itself reads the same parameter as an integer number of seconds, so
+	// the value below is 4s for the client and an unreachable upper bound for the action's own
+	// timeout. In production the two agree, because the platform also derives the step duration of
+	// an integer parameter from the bare number in seconds.
 	config := struct {
 		MessagesPerSecond int    `json:"messagesPerSecond"`
 		Duration          int    `json:"duration"`
 		Body              string `json:"body"`
 		SuccessRate       int    `json:"successRate"`
 		MaxConcurrent     int    `json:"maxConcurrent"`
-	}{MessagesPerSecond: 5, Duration: 4, Body: "e2e-periodic", SuccessRate: 100, MaxConcurrent: 1}
+	}{MessagesPerSecond: 5, Duration: 4000, Body: "e2e-periodic", SuccessRate: 100, MaxConcurrent: 1}
 
 	action, err := e.RunAction(queuePublishPeriodicActionId, target, config, &action_kit_api.ExecutionContext{})
 	require.NoError(t, err)
