@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.3
+
+- chore(deps): bump github.com/steadybit/action-kit/go/action_kit_test
+- fix: keep the publish duration as an integer number of seconds
+- fix: keep the publish duration as an integer number of seconds (#56)
+- fix: publish duration is a duration parameter, and e2e covers the actions (#55)
+
 ## v1.1.2
 
 - chore(deps): bump github.com/rabbitmq/amqp091-go from 1.13.0 to 1.14.0
