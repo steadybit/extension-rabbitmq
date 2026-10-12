@@ -65,6 +65,7 @@ func TestWithMinikube(t *testing.T) {
 			{Name: "check queue backlog below threshold", Test: testCheckQueueBacklogBelowThreshold},
 			{Name: "alter queue max length", Test: testAlterQueueMaxLength},
 			{Name: "publish fixed amount to queue", Test: testPublishFixedAmountToQueue},
+			{Name: "publish multi-line JSON body to queue", Test: testPublishMultilineJSONBodyToQueue},
 			{Name: "publish periodically to queue", Test: testPublishPeriodicallyToQueue},
 			{Name: "publish fixed amount to exchange", Test: testPublishFixedAmountToExchange},
 			{Name: "check queue backlog above threshold", Test: testCheckQueueBacklogAboveThreshold},

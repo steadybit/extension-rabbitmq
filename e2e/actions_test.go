@@ -202,6 +202,32 @@ func testPublishFixedAmountToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extensi
 	requireQueueGrewBy(t, m, before, 20)
 }
 
+// The body parameter is a textarea, so users paste multi-line JSON into it. The payload must reach
+// the broker unchanged, newlines and quotes included.
+func testPublishMultilineJSONBodyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extension) {
+	target := pollQueueTarget(t, e)
+	body := "{\n  \"orderId\": 42,\n  \"source\": \"e2e-multiline\",\n  \"items\": [\"a\", \"b\"]\n}"
+
+	config := struct {
+		NumberOfMessages int    `json:"numberOfMessages"`
+		Duration         int    `json:"duration"`
+		Body             string `json:"body"`
+		SuccessRate      int    `json:"successRate"`
+		MaxConcurrent    int    `json:"maxConcurrent"`
+	}{NumberOfMessages: 1, Duration: 1, Body: body, SuccessRate: 100, MaxConcurrent: 1}
+
+	action, err := e.RunAction(queuePublishFixedActionId, target, config, &action_kit_api.ExecutionContext{})
+	require.NoError(t, err)
+	defer func() { _ = action.Cancel() }()
+	require.NoError(t, action.Wait(), "the message must be published successfully")
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		payloads, err := peekQueuePayloads(m)
+		assert.NoError(c, err)
+		assert.Contains(c, payloads, body)
+	}, 30*time.Second, time.Second, "the multi-line JSON body must arrive on the queue unchanged")
+}
+
 func testPublishPeriodicallyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extension) {
 	target := pollQueueTarget(t, e)
 
@@ -343,6 +369,29 @@ func queueMessageCount(m *e2e.Minikube) (int, error) {
 		return 0, fmt.Errorf("failed to parse queue %q: %w", body, err)
 	}
 	return queue.Messages, nil
+}
+
+// peekQueuePayloads reads every message on the test queue and requeues it, so the queue depth the
+// later tests rely on is left untouched.
+func peekQueuePayloads(m *e2e.Minikube) ([]string, error) {
+	path := fmt.Sprintf("/api/queues/%s/%s/get", rabbitVhost, rabbitQueue)
+	out, err := rabbitMgmtExec(m, fmt.Sprintf(
+		`curl -fsS -u %s:%s -H 'content-type: application/json' -X POST -d '{"count":10000,"ackmode":"ack_requeue_true","encoding":"auto"}' http://localhost:15672%s`,
+		rabbitUser, rabbitPassword, path))
+	if err != nil {
+		return nil, fmt.Errorf("POST %s failed: %w", path, err)
+	}
+	var messages []struct {
+		Payload string `json:"payload"`
+	}
+	if err := json.Unmarshal([]byte(out), &messages); err != nil {
+		return nil, fmt.Errorf("failed to parse messages %q: %w", out, err)
+	}
+	payloads := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		payloads = append(payloads, msg.Payload)
+	}
+	return payloads, nil
 }
 
 // rabbitMgmtGET queries the RabbitMQ management API from inside the broker pod. Going through the

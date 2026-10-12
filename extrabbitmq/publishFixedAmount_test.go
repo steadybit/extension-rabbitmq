@@ -71,6 +71,20 @@ func TestPublishActions_DeclareDurationAsIntegerSeconds(t *testing.T) {
 	}
 }
 
+// Message bodies are often multi-line JSON, so the UI must render a textarea. The config key and
+// the string value stay the same, so existing experiments keep working.
+func TestPublishActions_DeclareBodyAsTextarea(t *testing.T) {
+	for _, desc := range []action_kit_api.ActionDescription{
+		(&publishRabbitFixedAmountAction{}).Describe(),
+		(&publishRabbitPeriodicallyAction{}).Describe(),
+		(&publishExchangeFixedAmountAction{}).Describe(),
+		(&publishExchangePeriodicallyAction{}).Describe(),
+	} {
+		p := requireParam(t, desc, "body")
+		assert.Equal(t, action_kit_api.ActionParameterTypeTextarea, p.Type, "%s: body must be a textarea", desc.Id)
+	}
+}
+
 func TestGetDelayBetweenRequestsInMsFixedAmount(t *testing.T) {
 	assert.Equal(t, uint64(500), getDelayBetweenRequestsInMsFixedAmount(1000, 3))
 	assert.Equal(t, uint64(1000), getDelayBetweenRequestsInMsFixedAmount(1000, 1))
