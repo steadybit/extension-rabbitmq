@@ -53,7 +53,7 @@ var (
 		Name:         "body",
 		Label:        "Message body",
 		Description:  new("Required. The message body to publish. Every message uses this same value."),
-		Type:         action_kit_api.ActionParameterTypeString,
+		Type:         action_kit_api.ActionParameterTypeTextarea,
 		Required:     new(true),
 		DefaultValue: new("test-message"),
 	}
