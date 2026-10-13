@@ -206,7 +206,15 @@ func testPublishFixedAmountToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extensi
 // the broker unchanged, newlines and quotes included.
 func testPublishMultilineJSONBodyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extension) {
 	target := pollQueueTarget(t, e)
-	body := "{\n  \"orderId\": 42,\n  \"source\": \"e2e-multiline\",\n  \"items\": [\"a\", \"b\"]\n}"
+	// Mirrors a customer payload: non-ASCII text both as literal JSON \u escapes (written by
+	// ensure-ASCII serializers) and as raw UTF-8. Neither may be unescaped or re-encoded.
+	body := `{
+  "orderId": 42,
+  "source": "e2e-multiline",
+  "escaped": "\u0391\u03C0\u03BF\u03C4\u03AD\u03BB\u03B5\u03C3\u03BC\u03B1",
+  "raw": "Αποτέλεσμα",
+  "items": ["a", "b"]
+}`
 
 	config := struct {
 		NumberOfMessages int    `json:"numberOfMessages"`
@@ -221,11 +229,27 @@ func testPublishMultilineJSONBodyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.E
 	defer func() { _ = action.Cancel() }()
 	require.NoError(t, action.Wait(), "the message must be published successfully")
 
+	var received string
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		payloads, err := peekQueuePayloads(m)
 		assert.NoError(c, err)
-		assert.Contains(c, payloads, body)
-	}, 30*time.Second, time.Second, "the multi-line JSON body must arrive on the queue unchanged")
+		for _, p := range payloads {
+			if strings.Contains(p, `"source": "e2e-multiline"`) {
+				received = p
+			}
+		}
+		assert.NotEmpty(c, received, "the multi-line JSON message must arrive on the queue")
+	}, 30*time.Second, time.Second)
+	require.Equal(t, body, received, "the body must arrive byte-for-byte, escapes and UTF-8 untouched")
+
+	// A consumer parsing the received message must get the same text from the escaped and the raw field.
+	var decoded struct {
+		Escaped string `json:"escaped"`
+		Raw     string `json:"raw"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(received), &decoded))
+	assert.Equal(t, "Αποτέλεσμα", decoded.Escaped)
+	assert.Equal(t, decoded.Raw, decoded.Escaped)
 }
 
 func testPublishPeriodicallyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.Extension) {
