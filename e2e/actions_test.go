@@ -211,7 +211,7 @@ func testPublishMultilineJSONBodyToQueue(t *testing.T, m *e2e.Minikube, e *e2e.E
 	body := `{
   "orderId": 42,
   "source": "e2e-multiline",
-  "escaped": "Αποτέλεσμα",
+  "escaped": "\u0391\u03C0\u03BF\u03C4\u03AD\u03BB\u03B5\u03C3\u03BC\u03B1",
   "raw": "Αποτέλεσμα",
   "items": ["a", "b"]
 }`
