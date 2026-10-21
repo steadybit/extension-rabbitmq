@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.8
+
+- chore(deps): bump github.com/michaelklishin/rabbit-hole/v3
+- fix: render publish message body as a textarea (#62)
+
 ## v1.1.7
 
 - chore(deps): bump golang.org/x/net to v0.61.0
