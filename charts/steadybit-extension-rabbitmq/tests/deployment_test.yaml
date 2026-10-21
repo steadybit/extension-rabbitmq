@@ -127,3 +127,21 @@ tests:
             - global-pull-secret
     asserts:
       - matchSnapshot: {}
+
+  - it: manifest should match snapshot with custom certificates and insecureSkipVerify
+    set:
+      rabbitmq:
+        insecureSkipVerify: true
+      extraVolumeMounts:
+        - name: extra-certs
+          mountPath: /etc/ssl/extra-certs
+          readOnly: true
+      extraVolumes:
+        - name: extra-certs
+          configMap:
+            name: rabbitmq-self-signed-ca
+      extraEnv:
+        - name: SSL_CERT_DIR
+          value: /etc/ssl/extra-certs:/etc/ssl/certs
+    asserts:
+      - matchSnapshot: {}

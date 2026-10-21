@@ -59,6 +59,15 @@ var (
 	Config Specification
 )
 
+// globalCaFile is the CA applied to TLS endpoints that set none. RabbitClusterCertChainFile was used
+// for this before RabbitClusterCaFile was honoured, so it stays the fallback.
+func (s *Specification) globalCaFile() string {
+	if s.RabbitClusterCaFile != "" {
+		return s.RabbitClusterCaFile
+	}
+	return s.RabbitClusterCertChainFile
+}
+
 func ParseConfiguration() {
 	if err := envconfig.Process("steadybit_extension", &Config); err != nil {
 		log.Fatal().Err(err).Msgf("Failed to parse configuration from environment.")
@@ -86,8 +95,8 @@ func ParseConfiguration() {
 			log.Fatal().Msg("management endpoint 'url' is required in each object")
 		}
 		isHTTPS := u.Scheme == "https"
-		if ep.CAFile == "" && isHTTPS && Config.RabbitClusterCertChainFile != "" {
-			ep.CAFile = Config.RabbitClusterCertChainFile
+		if ep.CAFile == "" && isHTTPS {
+			ep.CAFile = Config.globalCaFile()
 		}
 		if !ep.InsecureSkipVerify && isHTTPS && Config.InsecureSkipVerify {
 			ep.InsecureSkipVerify = true
@@ -121,8 +130,8 @@ func ParseConfiguration() {
 				ep.AMQP.URL = amqpURL.String()
 			}
 			isAMQPS := amqpURL.Scheme == "amqps"
-			if ep.AMQP.CAFile == "" && isAMQPS && Config.RabbitClusterCertChainFile != "" {
-				ep.AMQP.CAFile = Config.RabbitClusterCertChainFile
+			if ep.AMQP.CAFile == "" && isAMQPS {
+				ep.AMQP.CAFile = Config.globalCaFile()
 			}
 			if !ep.AMQP.InsecureSkipVerify && isAMQPS && Config.InsecureSkipVerify {
 				ep.AMQP.InsecureSkipVerify = true
@@ -138,8 +147,8 @@ func ParseConfiguration() {
 		}
 
 		// Apply global TLS defaults if AMQP omits its own
-		if ep.AMQP.CAFile == "" && Config.RabbitClusterCertChainFile != "" {
-			ep.AMQP.CAFile = Config.RabbitClusterCertChainFile
+		if ep.AMQP.CAFile == "" {
+			ep.AMQP.CAFile = Config.globalCaFile()
 		}
 		if !ep.AMQP.InsecureSkipVerify && Config.InsecureSkipVerify {
 			ep.AMQP.InsecureSkipVerify = true

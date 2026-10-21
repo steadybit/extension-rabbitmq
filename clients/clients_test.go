@@ -6,7 +6,6 @@ package clients
 import (
 	"crypto/tls"
 	"errors"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -172,10 +171,3 @@ var (
 	amqpDial    = func(addr string) (*amqp.Connection, error) { return amqp.Dial(addr) }
 	amqpDialTLS = func(addr string, cfg *tls.Config) (*amqp.Connection, error) { return amqp.DialTLS(addr, cfg) }
 )
-
-func init() {
-	// ensure TLS works for valid-ish tests (if they rely on default transport)
-	if tr, ok := http.DefaultTransport.(*http.Transport); ok {
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //NOSONAR go:S4830 go:S5527
-	}
-}

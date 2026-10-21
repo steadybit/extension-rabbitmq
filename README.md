@@ -31,6 +31,8 @@ rights on rabbitmq side :
 | `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_VHOSTS` | `discovery.attributes.excludes.vhost` | List of Vhost attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
 | `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_QUEUES` | `discovery.attributes.excludes.queue` | List of Queue attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                          | no       |         |
 | `STEADYBIT_EXTENSION_DISCOVERY_ATTRIBUTES_EXCLUDES_EXCHANGES` | `discovery.attributes.excludes.exchange` | List of Exchange attributes to exclude during discovery. Checked by key equality and supporting trailing `"*"`.                                                                                 | no       |         |
+| `STEADYBIT_EXTENSION_INSECURE_SKIP_VERIFY`                 | `rabbitmq.insecureSkipVerify`         | Skip TLS certificate verification for every `https`/`amqps` endpoint. Endpoints can also set `insecureSkipVerify` individually. See [Importing your own certificates](#importing-your-own-certificates). | no       | `false` |
+| `STEADYBIT_EXTENSION_RABBIT_CLUSTER_CA_FILE`               | via `extraEnv`                        | CA file used for every `https`/`amqps` endpoint that sets no `caFile` of its own.                                                                                                                     | no       |         |
 
 Beyond the settings above, this extension supports the configuration common to all Steadybit
 extensions:
@@ -41,6 +43,69 @@ extensions:
   stop the extension reporting targets you do not want.
 - [Group Matching](https://github.com/steadybit/discovery-kit/blob/main/docs/target-enrichment.md#group-matching) —
   tag discovered targets with a group, so enrichment rules only match within it.
+
+## Importing your own certificates
+
+If your RabbitMQ management API (`https`) or AMQP listener (`amqps`) uses a self-signed certificate, or one
+issued by a private CA, either trust the CA (recommended) or skip certificate verification.
+
+### Option 1: Mounting custom certificates
+
+Store the CA certificate (`*.crt`) in a config map:
+
+```shell
+kubectl create configmap -n steadybit-agent rabbitmq-self-signed-ca --from-file=./self-signed-ca.crt
+```
+
+Mount it into the extension:
+
+```yaml
+extraVolumeMounts:
+  - name: extra-certs
+    mountPath: /etc/ssl/extra-certs
+    readOnly: true
+extraVolumes:
+  - name: extra-certs
+    configMap:
+      name: rabbitmq-self-signed-ca
+```
+
+Then trust it in one of these ways:
+
+- **For all endpoints**, add it to the trusted certificate directories. The public CAs stay trusted:
+
+  ```yaml
+  extraEnv:
+    - name: SSL_CERT_DIR
+      value: /etc/ssl/extra-certs:/etc/ssl/certs
+  ```
+
+- **Per endpoint**, reference the file with `caFile` on the endpoint or its `amqp` object. That endpoint then
+  trusts only this CA:
+
+  ```yaml
+  rabbitmq:
+    auth:
+      managementEndpoints:
+        - url: "https://my-rabbitmq:15671"
+          caFile: /etc/ssl/extra-certs/self-signed-ca.crt
+          amqp:
+            url: "amqps://my-rabbitmq:5671/"
+            vhost: "/"
+            caFile: /etc/ssl/extra-certs/self-signed-ca.crt
+  ```
+
+### Option 2: Skipping certificate verification
+
+Disables TLS certificate verification. Suitable for testing, not recommended for production. Either for all
+endpoints:
+
+```yaml
+rabbitmq:
+  insecureSkipVerify: true
+```
+
+or per endpoint, with `insecureSkipVerify: true` on the endpoint or its `amqp` object.
 
 ## Installation
 
