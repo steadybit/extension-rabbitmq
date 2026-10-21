@@ -124,3 +124,9 @@ func TestGetEndpointByMgmtURL_ExactMatchOnly(t *testing.T) {
 	require.NotNil(t, got2)
 	assert.Equal(t, "http://rabbit.local:15672/api", got2.URL)
 }
+
+func TestGlobalCaFile_prefers_ca_file_over_cert_chain(t *testing.T) {
+	assert.Equal(t, "", (&Specification{}).globalCaFile())
+	assert.Equal(t, "/chain.pem", (&Specification{RabbitClusterCertChainFile: "/chain.pem"}).globalCaFile())
+	assert.Equal(t, "/ca.pem", (&Specification{RabbitClusterCertChainFile: "/chain.pem", RabbitClusterCaFile: "/ca.pem"}).globalCaFile())
+}

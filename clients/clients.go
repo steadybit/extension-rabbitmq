@@ -7,6 +7,7 @@ import (
 	"fmt"
 	rabbithole "github.com/michaelklishin/rabbit-hole/v3"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/steadybit/extension-kit/exttls"
 	"github.com/steadybit/extension-rabbitmq/config"
 	"net/http"
 	"net/url"
@@ -97,19 +98,11 @@ func newMgmtTransport(cfg *config.ManagementEndpoint) (http.RoundTripper, error)
 	}
 	base := http.RoundTripper(http.DefaultTransport)
 	if u.Scheme == "https" {
-		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: cfg.InsecureSkipVerify}
-		if cfg.CAFile != "" {
-			pem, err := os.ReadFile(cfg.CAFile)
-			if err != nil {
-				return nil, err
-			}
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM(pem) {
-				return nil, fmt.Errorf("invalid CA: %s", cfg.CAFile)
-			}
-			tlsCfg.RootCAs = pool
+		t := exttls.Transport()
+		if err := applyEndpointTLS(t.TLSClientConfig, cfg.InsecureSkipVerify, cfg.CAFile); err != nil {
+			return nil, err
 		}
-		base = &http.Transport{TLSClientConfig: tlsCfg}
+		base = t
 	}
 	return &retryTransport{base: base, maxRetries: 2, backoff: 500 * time.Millisecond}, nil
 }
@@ -203,20 +196,9 @@ func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, c
 		return conn, ch, nil
 
 	case "amqps":
-		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
-		if insecure {
-			tlsCfg.InsecureSkipVerify = true
-		}
-		if ca != "" {
-			pemBytes, err := os.ReadFile(ca)
-			if err != nil {
-				return nil, nil, err
-			}
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM(pemBytes) {
-				return nil, nil, fmt.Errorf("invalid CA: %s", ca)
-			}
-			tlsCfg.RootCAs = pool
+		tlsCfg := exttls.ClientConfig()
+		if err := applyEndpointTLS(tlsCfg, insecure, ca); err != nil {
+			return nil, nil, err
 		}
 		conn, err := amqp.DialTLS(au.String(), tlsCfg)
 		if err != nil {
@@ -232,4 +214,28 @@ func CreateNewAMQPConnection(amqpUrl string, user, pass string, insecure bool, c
 	default:
 		return nil, nil, fmt.Errorf("unsupported amqp scheme: %s", au.Scheme)
 	}
+}
+
+// applyEndpointTLS layers the per-endpoint TLS settings on top of the shared exttls configuration, which
+// already honours STEADYBIT_EXTENSION_INSECURE_SKIP_VERIFY. Without a CA file RootCAs stays nil, so the
+// system pool is used and CAs mounted via SSL_CERT_DIR are trusted.
+func applyEndpointTLS(tlsCfg *tls.Config, insecure bool, caFile string) error {
+	if tlsCfg.MinVersion < tls.VersionTLS12 {
+		tlsCfg.MinVersion = tls.VersionTLS12
+	}
+	if insecure {
+		tlsCfg.InsecureSkipVerify = true //NOSONAR explicit user choice
+	}
+	if caFile != "" {
+		pem, err := os.ReadFile(caFile)
+		if err != nil {
+			return err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return fmt.Errorf("invalid CA: %s", caFile)
+		}
+		tlsCfg.RootCAs = pool
+	}
+	return nil
 }
