@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.9
+
+- chore(deps): bump action_kit_test to v1.4.13 (#66)
+- chore(deps): bump github.com/KimMachineGun/automemlimit
+- chore(deps): bump github.com/rabbitmq/amqp091-go from 1.15.0 to 1.16.0
+- feat: support RabbitMQ with self-signed certificates (#65)
+
 ## v1.1.8
 
 - chore(deps): bump github.com/michaelklishin/rabbit-hole/v3
