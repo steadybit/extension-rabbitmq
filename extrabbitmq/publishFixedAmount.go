@@ -34,15 +34,14 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType: queueTargetId,
 		}),
-		Technology:  new("RabbitMQ"),
-		Category:    new("RabbitMQ"),
-		Kind:        action_kit_api.Attack,
-		TimeControl: action_kit_api.TimeControlInternal,
+		Technology:      new("RabbitMQ"),
+		Category:        new("RabbitMQ"),
+		Kind:            action_kit_api.Attack,
+		TimeControl:     action_kit_api.TimeControlInternal,
+		ParameterGroups: new([]action_kit_api.ParameterGroup{routingGroup, publisherBehaviorGroup}),
 		Parameters: []action_kit_api.ActionParameter{
-			exchange,
-			routingKey,
-			headers,
-			body,
+			headersContent,
+			bodyContent,
 			{
 				Name:         "numberOfMessages",
 				Label:        "Number of Messages",
@@ -53,6 +52,8 @@ func (a *publishRabbitFixedAmountAction) Describe() action_kit_api.ActionDescrip
 				MinValue:     new(1),
 			},
 			durationPublishFixedAmount,
+			exchangeRouting,
+			routingKeyRouting,
 			maxConcurrent,
 		},
 		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{

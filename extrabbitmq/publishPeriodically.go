@@ -36,15 +36,14 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 		TargetSelection: new(action_kit_api.TargetSelection{
 			TargetType: queueTargetId,
 		}),
-		Technology:  new("RabbitMQ"),
-		Category:    new("RabbitMQ"),
-		Kind:        action_kit_api.Attack,
-		TimeControl: action_kit_api.TimeControlExternal,
+		Technology:      new("RabbitMQ"),
+		Category:        new("RabbitMQ"),
+		Kind:            action_kit_api.Attack,
+		TimeControl:     action_kit_api.TimeControlExternal,
+		ParameterGroups: new([]action_kit_api.ParameterGroup{routingGroup, publisherBehaviorGroup}),
 		Parameters: []action_kit_api.ActionParameter{
-			exchange,
-			routingKey,
-			headers,
-			body,
+			headersContent,
+			bodyContent,
 			{
 				Name:         "messagesPerSecond",
 				Label:        "Messages per second",
@@ -57,6 +56,8 @@ func (a *publishRabbitPeriodicallyAction) Describe() action_kit_api.ActionDescri
 			},
 			durationPublishPeriodically,
 			successRate,
+			exchangeRouting,
+			routingKeyRouting,
 			maxConcurrent,
 		},
 		Status: new(action_kit_api.MutatingEndpointReferenceWithCallInterval{
