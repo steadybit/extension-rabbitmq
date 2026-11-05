@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- feat: RabbitMQ checks show Fail early with the other check settings; the publish actions group their parameters into "Message Content", "Routing" and "Publisher Behavior" (a few parameters slightly reordered)
+
 ## v1.1.9
 
 - chore(deps): bump action_kit_test to v1.4.13 (#66)
