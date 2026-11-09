@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## v1.1.10
 
+- chore(deps): bump golang.org/x/net to v0.62.0
 - feat: RabbitMQ checks show Fail early with the other check settings; the publish actions group their parameters into "Message Content", "Routing" and "Publisher Behavior" (a few parameters slightly reordered)
+- feat: group the parameters of the publish actions
+- feat: show Fail early with the other check settings
 
 ## v1.1.9
 
